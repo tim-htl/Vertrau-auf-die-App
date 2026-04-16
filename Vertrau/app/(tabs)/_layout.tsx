@@ -14,6 +14,7 @@ export default function TabLayout() {
         name="personen"
         options={{
           title: "Personen",
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="people-outline" size={size} color={color} />
           ),
