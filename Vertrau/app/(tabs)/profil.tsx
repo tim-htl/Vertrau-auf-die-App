@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
-import { useEffect, useState } from "react";
+import { useNavigation } from "expo-router";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -11,92 +12,196 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const STORAGE_KEY = "user_profile";
+// ─── Typen & Standardwerte ────────────────────────────────────────────────────
 
-type Profile = {
-  bild: string;
+type ProfilData = {
+  // Nicht bearbeitbar
   name: string;
-  studiengang: string;
-  universitaet: string;
   alter: string;
-  benutzername: string;
-  email: string;
+  studiengang: string;
+  uni: string;
+  // Bearbeitbar
+  bilder: (string | null)[];
   bio: string;
+  hobbies: string[];
+  module: string[];
 };
 
-const defaultProfile: Profile = {
-  bild: "",
-  name: "",
-  studiengang: "",
-  universitaet: "",
-  alter: "",
-  benutzername: "",
-  email: "",
+const DEFAULT_PROFIL: ProfilData = {
+  name: "Dein Name",
+  alter: "22",
+  studiengang: "Studiengang",
+  uni: "Universität",
+  bilder: [null, null, null, null, null],
   bio: "",
+  hobbies: [],
+  module: [],
 };
 
-export default function ProfilScreen() {
-  const [profil, setProfil] = useState<Profile>(defaultProfile);
-  const [gespeichert, setGespeichert] = useState(false);
+const STORAGE_KEY = "profil_v2";
 
-  useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((data) => {
-      if (data) setProfil(JSON.parse(data));
-    });
-  }, []);
+// ─── Hilfsfunktion: Bild auswählen ───────────────────────────────────────────
 
-  async function speichern() {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profil));
-    setGespeichert(true);
-    setTimeout(() => setGespeichert(false), 2000);
+async function bildAuswaehlen(): Promise<string | null> {
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== "granted") {
+    Alert.alert("Berechtigung benötigt", "Bitte erlaube den Zugriff auf deine Fotos.");
+    return null;
   }
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ["images"],
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.75,
+  });
+  if (!result.canceled) return result.assets[0].uri;
+  return null;
+}
 
-  async function bildAuswaehlen() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Berechtigung benötigt", "Bitte erlaube den Zugriff auf deine Fotos.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-    });
-    if (!result.canceled) {
-      setProfil((p) => ({ ...p, bild: result.assets[0].uri }));
-    }
-  }
+// ─── Ansicht: Profil-Karte (wie PersonenKarte) ────────────────────────────────
 
-  function feld(
-    label: string,
-    key: keyof Profile,
-    options?: { multiline?: boolean; maxLength?: number; keyboardType?: "default" | "email-address" | "numeric" }
-  ) {
-    return (
-      <View style={styles.feldContainer}>
-        <Text style={styles.label}>{label}</Text>
-        <TextInput
-          style={[styles.input, options?.multiline && styles.inputMultiline]}
-          value={profil[key]}
-          onChangeText={(text) => setProfil((p) => ({ ...p, [key]: text }))}
-          multiline={options?.multiline}
-          maxLength={options?.maxLength}
-          keyboardType={options?.keyboardType ?? "default"}
-          autoCapitalize={key === "email" ? "none" : "sentences"}
-          placeholder={label}
-          placeholderTextColor="#aaa"
-        />
-        {options?.maxLength && (
-          <Text style={styles.zaehler}>
-            {profil[key].length}/{options.maxLength}
-          </Text>
-        )}
+function ProfilAnsicht({ profil }: { profil: ProfilData }) {
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const TAB_BAR = 49;
+  const HEADER = 44;
+  const verfuegbar = height - insets.top - HEADER - TAB_BAR - insets.bottom;
+
+  const seitenPadding = 16;
+  const spaltenGap = 14;
+  const innenBreite = width - seitenPadding * 2;
+  const bildSpalteBreite = innenBreite * 0.33;
+  const infoSpalteBreite = innenBreite - bildSpalteBreite - spaltenGap;
+
+  const anzahlBilder = 5;
+  const bildAbstand = 8;
+  const bildKanteNachHoehe =
+    (verfuegbar - 32 - bildAbstand * (anzahlBilder - 1)) / anzahlBilder;
+  const bildKante = Math.min(bildSpalteBreite, bildKanteNachHoehe);
+
+  return (
+    <View style={[stile.karte, { width, height: verfuegbar }]}>
+      <View style={[stile.zeile, { paddingHorizontal: seitenPadding, gap: spaltenGap }]}>
+
+        {/* Linke Spalte: Fotostreifen */}
+        <View style={{ width: bildSpalteBreite, gap: bildAbstand, alignItems: "center" }}>
+          {profil.bilder.slice(0, anzahlBilder).map((bild, i) =>
+            bild ? (
+              <Image
+                key={i}
+                source={{ uri: bild }}
+                style={{ width: bildKante, height: bildKante, borderRadius: 14 }}
+              />
+            ) : (
+              <View
+                key={i}
+                style={{ width: bildKante, height: bildKante, borderRadius: 14, overflow: "hidden" }}
+              >
+                <View style={[stile.bildPlatzhalter, { width: bildKante, height: bildKante }]}>
+                  <Ionicons name="person" size={bildKante * 0.5} color="#fff" style={{ marginTop: bildKante * 0.08 }} />
+                </View>
+              </View>
+            )
+          )}
+        </View>
+
+        {/* Rechte Spalte: Infos */}
+        <View style={[stile.infoSpalte, { width: infoSpalteBreite }]}>
+          <Text style={stile.nameText} numberOfLines={1}>{profil.name}</Text>
+          <Text style={stile.alterText}>{profil.alter} Jahre</Text>
+          <View style={stile.trenner} />
+          <InfoZeile label="Bio" wert={profil.bio || "—"} />
+          <InfoZeile label="Uni" wert={profil.uni} />
+          <InfoZeile label="Studiengang" wert={profil.studiengang} />
+          <TagZeile label="Module" items={profil.module} />
+          <TagZeile label="Hobbies" items={profil.hobbies} />
+        </View>
       </View>
-    );
+    </View>
+  );
+}
+
+function InfoZeile({ label, wert }: { label: string; wert: string }) {
+  return (
+    <View style={stile.infoZeile}>
+      <Text style={stile.infoLabel}>{label}</Text>
+      <Text style={stile.infoWert}>{wert || "—"}</Text>
+    </View>
+  );
+}
+
+function TagZeile({ label, items }: { label: string; items: string[] }) {
+  return (
+    <View style={stile.infoZeile}>
+      <Text style={stile.infoLabel}>{label}</Text>
+      {items.length > 0 ? (
+        <View style={stile.tagReihe}>
+          {items.map((item, i) => (
+            <View key={i} style={stile.tag}>
+              <Text style={stile.tagText}>{item}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={stile.infoWert}>—</Text>
+      )}
+    </View>
+  );
+}
+
+// ─── Bearbeitungs-Modus ───────────────────────────────────────────────────────
+
+function ProfilBearbeiten({
+  profil,
+  onChange,
+}: {
+  profil: ProfilData;
+  onChange: (p: ProfilData) => void;
+}) {
+  const [neuesHobby, setNeuesHobby] = useState("");
+  const [neuesModul, setNeuesModul] = useState("");
+
+  async function bildWaehlen(index: number) {
+    const uri = await bildAuswaehlen();
+    if (uri) {
+      const neueBilder = [...profil.bilder];
+      neueBilder[index] = uri;
+      onChange({ ...profil, bilder: neueBilder });
+    }
+  }
+
+  function bildEntfernen(index: number) {
+    const neueBilder = [...profil.bilder];
+    neueBilder[index] = null;
+    onChange({ ...profil, bilder: neueBilder });
+  }
+
+  function hobbyHinzufuegen() {
+    const text = neuesHobby.trim();
+    if (!text) return;
+    onChange({ ...profil, hobbies: [...profil.hobbies, text] });
+    setNeuesHobby("");
+  }
+
+  function hobbyEntfernen(i: number) {
+    onChange({ ...profil, hobbies: profil.hobbies.filter((_, idx) => idx !== i) });
+  }
+
+  function modulHinzufuegen() {
+    const text = neuesModul.trim();
+    if (!text) return;
+    onChange({ ...profil, module: [...profil.module, text] });
+    setNeuesModul("");
+  }
+
+  function modulEntfernen(i: number) {
+    onChange({ ...profil, module: profil.module.filter((_, idx) => idx !== i) });
   }
 
   return (
@@ -104,109 +209,402 @@ export default function ProfilScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.titel}>Mein Profil</Text>
+      <ScrollView style={stile.editContainer} contentContainerStyle={{ paddingBottom: 40 }}>
 
-        {/* Profilbild */}
-        <TouchableOpacity style={styles.bildContainer} onPress={bildAuswaehlen}>
-          {profil.bild ? (
-            <Image source={{ uri: profil.bild }} style={styles.bild} />
-          ) : (
-            <View style={styles.bildPlatzhalter}>
-              <Text style={styles.bildPlatzhalterText}>Foto{"\n"}hinzufügen</Text>
+        {/* Bilder */}
+        <Text style={stile.editSektionTitel}>Bilder</Text>
+        <View style={stile.bildReihe}>
+          {profil.bilder.map((bild, i) => (
+            <TouchableOpacity
+              key={i}
+              style={stile.bildSlot}
+              onPress={() => bildWaehlen(i)}
+              onLongPress={() => bild && bildEntfernen(i)}
+            >
+              {bild ? (
+                <>
+                  <Image source={{ uri: bild }} style={stile.bildSlotBild} />
+                  <View style={stile.bildLoeschenBadge}>
+                    <Ionicons name="close" size={10} color="#fff" />
+                  </View>
+                </>
+              ) : (
+                <View style={stile.bildSlotLeer}>
+                  <Ionicons name="add" size={22} color="#8E8E93" />
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={stile.editHinweis}>Tippen zum Ändern · Gedrückt halten zum Entfernen</Text>
+
+        {/* Bio */}
+        <Text style={stile.editSektionTitel}>Bio</Text>
+        <View style={stile.editSektion}>
+          <TextInput
+            style={stile.bioInput}
+            value={profil.bio}
+            onChangeText={(t) => onChange({ ...profil, bio: t })}
+            placeholder="Schreib etwas über dich…"
+            placeholderTextColor="#aaa"
+            multiline
+            maxLength={200}
+          />
+          <Text style={stile.zeichenZaehler}>{profil.bio.length}/200</Text>
+        </View>
+
+        {/* Hobbies */}
+        <Text style={stile.editSektionTitel}>Hobbies</Text>
+        <View style={stile.editSektion}>
+          <View style={stile.tagReiheEdit}>
+            {profil.hobbies.map((h, i) => (
+              <TouchableOpacity
+                key={i}
+                style={stile.tagEdit}
+                onPress={() => hobbyEntfernen(i)}
+              >
+                <Text style={stile.tagEditText}>{h}</Text>
+                <Ionicons name="close" size={12} color="#666" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={stile.hinzufuegenZeile}>
+            <TextInput
+              style={stile.tagInput}
+              value={neuesHobby}
+              onChangeText={setNeuesHobby}
+              placeholder="Hobby hinzufügen…"
+              placeholderTextColor="#aaa"
+              onSubmitEditing={hobbyHinzufuegen}
+              returnKeyType="done"
+            />
+            <TouchableOpacity style={stile.hinzufuegenButton} onPress={hobbyHinzufuegen}>
+              <Ionicons name="add" size={20} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Module */}
+        <Text style={stile.editSektionTitel}>Module</Text>
+        <View style={stile.editSektion}>
+          <View style={stile.tagReiheEdit}>
+            {profil.module.map((m, i) => (
+              <TouchableOpacity
+                key={i}
+                style={stile.tagEdit}
+                onPress={() => modulEntfernen(i)}
+              >
+                <Text style={stile.tagEditText}>{m}</Text>
+                <Ionicons name="close" size={12} color="#666" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={stile.hinzufuegenZeile}>
+            <TextInput
+              style={stile.tagInput}
+              value={neuesModul}
+              onChangeText={setNeuesModul}
+              placeholder="Modul hinzufügen…"
+              placeholderTextColor="#aaa"
+              onSubmitEditing={modulHinzufuegen}
+              returnKeyType="done"
+            />
+            <TouchableOpacity style={stile.hinzufuegenButton} onPress={modulHinzufuegen}>
+              <Ionicons name="add" size={20} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Nicht bearbeitbare Felder (Info) */}
+        <Text style={stile.editSektionTitel}>Nicht änderbar</Text>
+        <View style={stile.editSektion}>
+          {[
+            { label: "Name", wert: profil.name },
+            { label: "Alter", wert: `${profil.alter} Jahre` },
+            { label: "Uni", wert: profil.uni },
+            { label: "Studiengang", wert: profil.studiengang },
+          ].map(({ label, wert }, i, arr) => (
+            <View
+              key={label}
+              style={[stile.readonlyZeile, i < arr.length - 1 && stile.readonlyTrenner]}
+            >
+              <Text style={stile.readonlyLabel}>{label}</Text>
+              <Text style={stile.readonlyWert}>{wert}</Text>
             </View>
-          )}
-        </TouchableOpacity>
-
-        {feld("Name", "name")}
-        {feld("Benutzername", "benutzername")}
-        {feld("E-Mail-Adresse", "email", { keyboardType: "email-address" })}
-        {feld("Alter", "alter", { keyboardType: "numeric" })}
-        {feld("Studiengang", "studiengang")}
-        {feld("Universität", "universitaet")}
-        {feld("Bio", "bio", { multiline: true, maxLength: 200 })}
-
-        <TouchableOpacity style={styles.button} onPress={speichern}>
-          <Text style={styles.buttonText}>
-            {gespeichert ? "Gespeichert ✓" : "Speichern"}
-          </Text>
-        </TouchableOpacity>
+          ))}
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    paddingBottom: 40,
+// ─── Haupt-Screen ─────────────────────────────────────────────────────────────
+
+export default function ProfilScreen() {
+  const navigation = useNavigation();
+  const [profil, setProfil] = useState<ProfilData>(DEFAULT_PROFIL);
+  const [editModus, setEditModus] = useState(false);
+  const editProfilRef = useRef<ProfilData>(profil);
+
+  // Profil laden
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY).then((data) => {
+      if (data) {
+        const geladen = JSON.parse(data);
+        setProfil(geladen);
+        editProfilRef.current = geladen;
+      }
+    });
+  }, []);
+
+  // Header-Button dynamisch setzen
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={async () => {
+            if (editModus) {
+              // Speichern
+              await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(editProfilRef.current));
+              setProfil({ ...editProfilRef.current });
+            }
+            setEditModus((v) => !v);
+          }}
+          style={{ marginRight: 4 }}
+        >
+          <Ionicons
+            name={editModus ? "checkmark" : "pencil"}
+            size={editModus ? 22 : 20}
+            color="#007AFF"
+          />
+        </TouchableOpacity>
+      ),
+    });
+  }, [editModus, navigation]);
+
+  function onProfilAenderung(neuesDaten: ProfilData) {
+    editProfilRef.current = neuesDaten;
+  }
+
+  if (editModus) {
+    return (
+      <ProfilBearbeiten
+        profil={editProfilRef.current}
+        onChange={onProfilAenderung}
+      />
+    );
+  }
+
+  return <ProfilAnsicht profil={profil} />;
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const stile = StyleSheet.create({
+  // Profil-Ansicht (wie PersonenKarte)
+  karte: {
+    backgroundColor: "#fff",
+    justifyContent: "flex-start",
+    paddingTop: 16,
   },
-  titel: {
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 24,
-    textAlign: "center",
-  },
-  bildContainer: {
-    alignSelf: "center",
-    marginBottom: 28,
-  },
-  bild: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  zeile: {
+    flexDirection: "row",
+    flex: 1,
+    paddingBottom: 16,
   },
   bildPlatzhalter: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#e0e0e0",
+    backgroundColor: "#C7C7CC",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  infoSpalte: {
+    flex: 1,
+    paddingTop: 4,
+  },
+  nameText: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#1a1a1a",
+    letterSpacing: -0.5,
+  },
+  alterText: {
+    fontSize: 15,
+    color: "#8E8E93",
+    marginTop: 2,
+    fontWeight: "500",
+  },
+  trenner: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "#e5e5ea",
+    marginVertical: 10,
+  },
+  infoZeile: {
+    marginBottom: 45,
+  },
+  infoLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#8E8E93",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  infoWert: {
+    fontSize: 14,
+    color: "#1a1a1a",
+    lineHeight: 19,
+  },
+  tagReihe: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+  },
+  tag: {
+    backgroundColor: "#F2F2F7",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  tagText: {
+    fontSize: 12,
+    color: "#1a1a1a",
+    fontWeight: "500",
+  },
+
+  // Bearbeitungs-Modus
+  editContainer: {
+    flex: 1,
+    backgroundColor: "#F2F2F7",
+  },
+  editSektionTitel: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#6D6D72",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginTop: 24,
+    marginBottom: 7,
+    marginHorizontal: 20,
+  },
+  editSektion: {
+    backgroundColor: "#fff",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d1d1d6",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+
+  // Bilder
+  bildReihe: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  bildSlot: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  bildSlotBild: {
+    width: "100%",
+    height: "100%",
+  },
+  bildSlotLeer: {
+    flex: 1,
+    backgroundColor: "#E5E5EA",
     justifyContent: "center",
     alignItems: "center",
   },
-  bildPlatzhalterText: {
-    color: "#888",
-    fontSize: 13,
+  bildLoeschenBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 8,
+    width: 16,
+    height: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  editHinweis: {
+    fontSize: 12,
+    color: "#8E8E93",
     textAlign: "center",
+    marginTop: 6,
+    marginBottom: 2,
   },
-  feldContainer: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#555",
-    marginBottom: 4,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    backgroundColor: "#fafafa",
-  },
-  inputMultiline: {
-    height: 100,
+
+  // Bio
+  bioInput: {
+    fontSize: 15,
+    color: "#1a1a1a",
+    minHeight: 80,
     textAlignVertical: "top",
+    lineHeight: 21,
   },
-  zaehler: {
+  zeichenZaehler: {
     fontSize: 12,
     color: "#aaa",
     textAlign: "right",
-    marginTop: 2,
+    marginTop: 4,
   },
-  button: {
-    backgroundColor: "#007AFF",
-    borderRadius: 12,
-    paddingVertical: 14,
+
+  // Tag-Bearbeitung
+  tagReiheEdit: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 10,
+  },
+  tagEdit: {
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
+    backgroundColor: "#F2F2F7",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
+  tagEditText: {
+    fontSize: 13,
+    color: "#1a1a1a",
+  },
+  hinzufuegenZeile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  tagInput: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1a1a1a",
+    paddingVertical: 4,
+  },
+  hinzufuegenButton: {
+    padding: 4,
+  },
+
+  // Nicht bearbeitbare Felder
+  readonlyZeile: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 11,
+  },
+  readonlyTrenner: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#d1d1d6",
+  },
+  readonlyLabel: {
+    fontSize: 15,
+    color: "#1a1a1a",
+  },
+  readonlyWert: {
+    fontSize: 15,
+    color: "#8E8E93",
+    maxWidth: "60%",
+    textAlign: "right",
   },
 });
