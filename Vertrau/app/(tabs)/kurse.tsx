@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     borderRadius: 26,
   },
   uniLogoPlatzhalter: {
-    backgroundColor: "#007AFF",
+    backgroundColor: "#3062ac",
     justifyContent: "center",
     alignItems: "center",
   },
