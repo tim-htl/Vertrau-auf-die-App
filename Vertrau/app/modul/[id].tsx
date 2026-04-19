@@ -8,9 +8,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { DEMO_STUDIENGANG, type Teilnehmer } from "../../data/kurse";
+import { DEMO_STUDIENGANG, findeModul, type Teilnehmer } from "../../data/kurse";
 
-// ─── Einzelne Teilnehmer-Zeile ────────────────────────────────────────────────
+// ─── Teilnehmer-Zeile ─────────────────────────────────────────────────────────
 
 function TeilnehmerZeile({
   person,
@@ -42,29 +42,35 @@ function TeilnehmerZeile({
 
 // ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
-export default function KursDetailScreen() {
+export default function ModulDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  const kurs = DEMO_STUDIENGANG.meineKurse.find((k) => k.id === id);
-  const teilnehmer = kurs?.teilnehmer ?? [];
+  const modul = findeModul(DEMO_STUDIENGANG.moduldatenbank, id);
+  const teilnehmer = modul?.teilnehmer ?? [];
+
+  if (!modul) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ title: "Modul" }} />
+        <Text style={styles.leerText}>Modul nicht gefunden.</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: kurs?.name ?? "Kurs" }} />
+      <Stack.Screen options={{ title: modul.name }} />
 
-      {/* Kurs-Kopf */}
+      {/* Modul-Kopf */}
       <View style={styles.kopf}>
-        <Text style={styles.kursName}>{kurs?.name ?? "Unbekannter Kurs"}</Text>
-        {kurs?.ects !== undefined && (
-          <Text style={styles.kursMeta}>
-            {kurs.ects} ECTS
-            {kurs.semester !== undefined && ` · ${kurs.semester}. Semester`}
-          </Text>
+        <Text style={styles.modulName}>{modul.name}</Text>
+        {modul.ects !== undefined && (
+          <Text style={styles.modulMeta}>{modul.ects} ECTS</Text>
         )}
       </View>
 
-      {/* Liste der Teilnehmer */}
+      {/* Teilnehmer */}
       <Text style={styles.sektionTitel}>
         Teilnehmer ({teilnehmer.length})
       </Text>
@@ -108,13 +114,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#d1d1d6",
   },
-  kursName: {
+  modulName: {
     fontSize: 22,
     fontWeight: "700",
     color: "#1a1a1a",
     letterSpacing: -0.3,
   },
-  kursMeta: {
+  modulMeta: {
     fontSize: 13,
     color: "#8E8E93",
     marginTop: 4,
@@ -176,5 +182,7 @@ const styles = StyleSheet.create({
   leerText: {
     color: "#8E8E93",
     fontSize: 14,
+    textAlign: "center",
+    marginTop: 40,
   },
 });

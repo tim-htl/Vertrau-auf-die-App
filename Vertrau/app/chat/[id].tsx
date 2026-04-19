@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Stack, useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Image,
@@ -16,11 +16,17 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INITIAL_CHATS, type Message } from "../../data/chats";
 
-const STORAGE_PREFIX = "messages_";
+const STORAGE_PREFIX = "messages_v2_";
 
 // ─── Einzelne Nachricht ───────────────────────────────────────────────────────
 
-function NachrichtBlase({ nachricht }: { nachricht: Message }) {
+function NachrichtBlase({
+  nachricht,
+  zeigeSender,
+}: {
+  nachricht: Message;
+  zeigeSender: boolean;
+}) {
   const vonMir = nachricht.fromMe;
   return (
     <View
@@ -29,6 +35,9 @@ function NachrichtBlase({ nachricht }: { nachricht: Message }) {
         vonMir ? styles.blasenZeileRechts : styles.blasenZeileLinks,
       ]}
     >
+      {zeigeSender && !vonMir && nachricht.senderName && (
+        <Text style={styles.senderName}>{nachricht.senderName}</Text>
+      )}
       <View style={[styles.blase, vonMir ? styles.blaseMir : styles.blaseAnder]}>
         <Text style={[styles.blasenText, vonMir && styles.blasenTextMir]}>
           {nachricht.text}
@@ -45,12 +54,14 @@ function NachrichtBlase({ nachricht }: { nachricht: Message }) {
 
 export default function ChatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
   const [nachrichten, setNachrichten] = useState<Message[]>([]);
   const [eingabe, setEingabe] = useState("");
 
   const chat = INITIAL_CHATS.find((c) => c.id === id);
+  const istGruppe = chat?.linkType === "activity";
 
   // Nachrichten laden
   useEffect(() => {
@@ -67,6 +78,30 @@ export default function ChatDetailScreen() {
     }
     laden();
   }, [id]);
+
+  // Für jede Nachricht entscheiden, ob der Sendername angezeigt wird
+  // (nur in Gruppen-Chats, nur bei Senderwechsel – WhatsApp-Stil).
+  const senderSichtbar = useMemo(() => {
+    if (!istGruppe) return nachrichten.map(() => false);
+    return nachrichten.map((msg, i) => {
+      if (msg.fromMe) return false;
+      if (!msg.senderName) return false;
+      const vorherige = nachrichten[i - 1];
+      if (!vorherige) return true;
+      if (vorherige.fromMe) return true;
+      return vorherige.senderName !== msg.senderName;
+    });
+  }, [nachrichten, istGruppe]);
+
+  // Header-Tap: zur verknüpften Profil-/Aktivitätsansicht navigieren
+  function oeffneHeaderZiel() {
+    if (!chat?.linkType || !chat.linkId) return;
+    if (chat.linkType === "person") {
+      router.push(`/person/${chat.linkId}`);
+    } else if (chat.linkType === "activity") {
+      router.push(`/aktivitaet/${chat.linkId}`);
+    }
+  }
 
   // Nachricht senden
   async function senden() {
@@ -101,11 +136,16 @@ export default function ChatDetailScreen() {
 
   return (
     <>
-      {/* Header mit Bild + Name */}
+      {/* Header mit Bild + Name – tapbar */}
       <Stack.Screen
         options={{
           headerTitle: () => (
-            <View style={styles.headerInnen}>
+            <TouchableOpacity
+              style={styles.headerInnen}
+              onPress={oeffneHeaderZiel}
+              activeOpacity={0.6}
+              disabled={!chat?.linkType || !chat?.linkId}
+            >
               {chat?.image ? (
                 <Image source={{ uri: chat.image }} style={styles.headerAvatar} />
               ) : (
@@ -121,7 +161,7 @@ export default function ChatDetailScreen() {
               <Text style={styles.headerName} numberOfLines={1}>
                 {chat?.name ?? "Chat"}
               </Text>
-            </View>
+            </TouchableOpacity>
           ),
         }}
       />
@@ -136,7 +176,12 @@ export default function ChatDetailScreen() {
           ref={flatListRef}
           data={nachrichten}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <NachrichtBlase nachricht={item} />}
+          renderItem={({ item, index }) => (
+            <NachrichtBlase
+              nachricht={item}
+              zeigeSender={senderSichtbar[index] ?? false}
+            />
+          )}
           contentContainerStyle={styles.liste}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
@@ -212,6 +257,13 @@ const styles = StyleSheet.create({
   },
   blasenZeileRechts: {
     alignSelf: "flex-end",
+  },
+  senderName: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#007AFF",
+    marginLeft: 10,
+    marginBottom: 2,
   },
   blase: {
     borderRadius: 18,

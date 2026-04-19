@@ -16,7 +16,7 @@ import { INITIAL_CHATS, type ChatItem, type Message } from "../../data/chats";
 // ─── Hilfsfunktion: Nachrichten laden ────────────────────────────────────────
 
 async function ladeNachrichten(chatId: string): Promise<Message[]> {
-  const key = `messages_${chatId}`;
+  const key = `messages_v2_${chatId}`;
   const gespeichert = await AsyncStorage.getItem(key);
   if (gespeichert) return JSON.parse(gespeichert);
   // Erstmalig: Demo-Nachrichten speichern
