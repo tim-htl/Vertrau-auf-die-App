@@ -16,7 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INITIAL_CHATS, type Message } from "../../data/chats";
 
-const STORAGE_PREFIX = "messages_";
+const STORAGE_PREFIX = "messages_v2_";
 
 // ─── Einzelne Nachricht ───────────────────────────────────────────────────────
 
