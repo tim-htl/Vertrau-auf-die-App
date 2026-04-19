@@ -9,6 +9,7 @@ export default function RootLayout() {
       <Stack.Screen name="bereich/[...path]" options={{ headerBackTitle: "Zurück" }} />
       <Stack.Screen name="person/[id]" options={{ headerBackTitle: "Zurück" }} />
       <Stack.Screen name="aktivitaet/[id]" options={{ headerBackTitle: "Zurück" }} />
+      <Stack.Screen name="modul/[id]" options={{ headerBackTitle: "Zurück" }} />
     </Stack>
   );
 }

@@ -40,7 +40,7 @@ function ListenZeile({
   );
 }
 
-// ─── Modul-Zeile (Blatt, nicht navigierbar) ──────────────────────────────────
+// ─── Modul-Zeile (navigiert zur Modulansicht) ─────────────────────────────────
 
 function ModulZeile({
   modul,
@@ -49,11 +49,19 @@ function ModulZeile({
   modul: Modul;
   letzte?: boolean;
 }) {
+  const router = useRouter();
+  const untertitel = [
+    modul.ects ? `${modul.ects} ECTS` : null,
+    modul.teilnehmer?.length ? `${modul.teilnehmer.length} Teilnehmer` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ") || undefined;
+
   return (
     <ListenZeile
       titel={modul.name}
-      untertitel={modul.ects ? `${modul.ects} ECTS` : undefined}
-      chevron={false}
+      untertitel={untertitel}
+      onPress={() => router.push(`/modul/${modul.id}`)}
       letzte={letzte}
     />
   );
