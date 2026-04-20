@@ -11,6 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+// WICHTIG: Diese beiden Imports haben in deinem Ausschnitt gefehlt!
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INITIAL_CHATS, type ChatItem, type Message } from "../../data/chats";
 
 // ─── Hilfsfunktion: Nachrichten laden ────────────────────────────────────────
@@ -70,6 +72,11 @@ function Trennlinie() {
 
 export default function ChatScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  
+  // Die Basis-Höhe des Headers
+  const HEADER_HEIGHT = 44 + insets.top;
+
   const [letzteNachrichten, setLetzteNachrichten] = useState<
     Record<string, string>
   >({});
@@ -97,6 +104,8 @@ export default function ChatScreen() {
       <FlatList
         data={INITIAL_CHATS}
         keyExtractor={(item) => item.id}
+        // HIER ANGEPASST: HEADER_HEIGHT + 10 für etwas mehr Luft nach oben
+        contentContainerStyle={{ paddingTop: HEADER_HEIGHT + 10 }} 
         renderItem={({ item }) => (
           <ChatListItem
             chat={item}

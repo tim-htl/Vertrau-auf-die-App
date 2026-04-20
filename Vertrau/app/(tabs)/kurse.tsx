@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context"; // <-- HINZUGEFÜGT
 import { DEMO_STUDIENGANG } from "../../data/kurse";
 
 // ─── Uni-Logo (Bild oder Initialen-Platzhalter) ──────────────────────────────
@@ -61,10 +62,15 @@ function ListenZeile({
 
 export default function KurseScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets(); // <-- HINZUGEFÜGT
+  const HEADER_HEIGHT = 44 + insets.top; // <-- HINZUGEFÜGT
   const studiengang = DEMO_STUDIENGANG;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.inhalt}>
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={[styles.inhalt, { paddingTop: HEADER_HEIGHT }]} // <-- HINZUGEFÜGT
+    >
       {/* Kopfbereich: Logo + Studiengangs-Name */}
       <View style={styles.kopf}>
         <UniLogo uri={studiengang.uniLogo} text={studiengang.uni} />

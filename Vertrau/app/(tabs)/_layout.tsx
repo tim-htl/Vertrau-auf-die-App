@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import { StyleSheet } from "react-native";
+import { BlurView } from "expo-blur";
 
 export default function TabLayout() {
   return (
@@ -8,13 +10,17 @@ export default function TabLayout() {
         tabBarActiveTintColor: "#007AFF",
         tabBarInactiveTintColor: "#8E8E93",
         tabBarShowLabel: false,
+        // Globaler Blur-Header für ALLE Tabs (gleich dick, gleiche Optik)
+        headerTransparent: true,
+        headerBackground: () => (
+          <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
+        ),
       }}
     >
       <Tabs.Screen
         name="personen"
         options={{
-          title: "Personen",
-          headerShown: false,
+          title: "Entdecken",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="people-outline" size={size} color={color} />
           ),
@@ -24,7 +30,6 @@ export default function TabLayout() {
         name="treffen"
         options={{
           title: "Treffen",
-          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-outline" size={size} color={color} />
           ),
@@ -51,7 +56,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profil"
         options={{
-          title: "Profil",
+          title: "Mein Profil",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
           ),
