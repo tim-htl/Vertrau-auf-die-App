@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { INITIAL_CHATS, type Message } from "../../data/chats";
 
 const STORAGE_PREFIX = "messages_v2_";
@@ -53,9 +54,12 @@ function NachrichtBlase({
 // ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
 export default function ChatDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const flatListRef = useRef<FlatList>(null);
   const [nachrichten, setNachrichten] = useState<Message[]>([]);
   const [eingabe, setEingabe] = useState("");
@@ -65,35 +69,47 @@ export default function ChatDetailScreen() {
 
   // Nachrichten laden
   useEffect(() => {
+    if (!id) return;
+
     async function laden() {
-      const key = STORAGE_PREFIX + id;
-      const gespeichert = await AsyncStorage.getItem(key);
-      if (gespeichert) {
-        setNachrichten(JSON.parse(gespeichert));
-      } else {
-        const initial = chat?.messages ?? [];
-        await AsyncStorage.setItem(key, JSON.stringify(initial));
-        setNachrichten(initial);
+      try {
+        const key = STORAGE_PREFIX + id;
+        const gespeichert = await AsyncStorage.getItem(key);
+
+        if (gespeichert) {
+          setNachrichten(JSON.parse(gespeichert));
+        } else {
+          setNachrichten(chat?.messages ?? []);
+        }
+      } catch {
+        setNachrichten(chat?.messages ?? []);
       }
     }
     laden();
-  }, [id]);
+  }, [id, chat]);
 
-  // Für jede Nachricht entscheiden, ob der Sendername angezeigt wird
-  // (nur in Gruppen-Chats, nur bei Senderwechsel – WhatsApp-Stil).
+  // Automatisches Scrollen nach unten bei neuen Nachrichten
+  useEffect(() => {
+    if (nachrichten.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: false });
+      }, 50);
+    }
+  }, [nachrichten]);
+
+  // Entscheiden, ob Sendername angezeigt wird (nur in Gruppen, bei Senderwechsel)
   const senderSichtbar = useMemo(() => {
     if (!istGruppe) return nachrichten.map(() => false);
     return nachrichten.map((msg, i) => {
       if (msg.fromMe) return false;
       if (!msg.senderName) return false;
       const vorherige = nachrichten[i - 1];
-      if (!vorherige) return true;
-      if (vorherige.fromMe) return true;
+      if (!vorherige || vorherige.fromMe) return true;
       return vorherige.senderName !== msg.senderName;
     });
   }, [nachrichten, istGruppe]);
 
-  // Header-Tap: zur verknüpften Profil-/Aktivitätsansicht navigieren
+  // Header-Ziel öffnen (Profil oder Aktivität)
   function oeffneHeaderZiel() {
     if (!chat?.linkType || !chat.linkId) return;
     if (chat.linkType === "person") {
@@ -106,7 +122,7 @@ export default function ChatDetailScreen() {
   // Nachricht senden
   async function senden() {
     const text = eingabe.trim();
-    if (!text) return;
+    if (!text || !id) return;
 
     const jetzt = new Date();
     const zeit = `${jetzt.getHours().toString().padStart(2, "0")}:${jetzt
@@ -124,19 +140,12 @@ export default function ChatDetailScreen() {
     const aktualisiert = [...nachrichten, neue];
     setNachrichten(aktualisiert);
     setEingabe("");
-    await AsyncStorage.setItem(
-      STORAGE_PREFIX + id,
-      JSON.stringify(aktualisiert)
-    );
-
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 50);
+    await AsyncStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(aktualisiert));
   }
 
   return (
     <>
-      {/* Header mit Bild + Name – tapbar */}
+      {/* Header mit Bild + Name */}
       <Stack.Screen
         options={{
           headerTitle: () => (
@@ -144,18 +153,13 @@ export default function ChatDetailScreen() {
               style={styles.headerInnen}
               onPress={oeffneHeaderZiel}
               activeOpacity={0.6}
-              disabled={!chat?.linkType || !chat?.linkId}
+              disabled={!chat?.linkType}
             >
               {chat?.image ? (
                 <Image source={{ uri: chat.image }} style={styles.headerAvatar} />
               ) : (
                 <View style={styles.headerAvatarPlatzhalter}>
-                  <Ionicons
-                    name="person"
-                    size={18}
-                    color="#fff"
-                    style={{ marginTop: 4 }}
-                  />
+                  <Ionicons name="person" size={18} color="#fff" />
                 </View>
               )}
               <Text style={styles.headerName} numberOfLines={1}>
@@ -169,9 +173,8 @@ export default function ChatDetailScreen() {
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+        keyboardVerticalOffset={headerHeight}
       >
-        {/* Nachrichtenliste */}
         <FlatList
           ref={flatListRef}
           data={nachrichten}
@@ -182,11 +185,12 @@ export default function ChatDetailScreen() {
               zeigeSender={senderSichtbar[index] ?? false}
             />
           )}
-          contentContainerStyle={styles.liste}
+          // Padding oben hinzugefügt, damit Inhalte unter dem Header starten
+          contentContainerStyle={[styles.liste, { paddingTop: headerHeight + 10 }]}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
 
-        {/* Eingabeleiste */}
+        {/* Eingabeleiste mit Senden-Button */}
         <View style={[styles.eingabeLeiste, { paddingBottom: insets.bottom + 8 }]}>
           <TextInput
             style={styles.eingabe}
@@ -195,9 +199,6 @@ export default function ChatDetailScreen() {
             placeholder="Nachricht schreiben…"
             placeholderTextColor="#aaa"
             multiline
-            returnKeyType="send"
-            onSubmitEditing={senden}
-            blurOnSubmit={false}
           />
           <TouchableOpacity
             style={[styles.sendenButton, !eingabe.trim() && styles.sendenButtonDisabled]}
@@ -234,9 +235,8 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: 17,
     backgroundColor: "#b0b0b8",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     alignItems: "center",
-    overflow: "hidden",
   },
   headerName: {
     fontSize: 16,
@@ -245,8 +245,8 @@ const styles = StyleSheet.create({
     maxWidth: 200,
   },
   liste: {
-    padding: 12,
-    paddingBottom: 4,
+    paddingHorizontal: 12,
+    paddingBottom: 20,
   },
   blasenZeile: {
     marginVertical: 3,

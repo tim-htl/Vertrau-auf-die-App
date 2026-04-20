@@ -1,6 +1,7 @@
 import { Stack, useLocalSearchParams } from "expo-router";
-import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useWindowDimensions } from "react-native";
 import { AktivitaetKarte } from "../(tabs)/treffen";
 import { DEMO_AKTIVITAETEN } from "../../data/aktivitaeten";
 
@@ -8,42 +9,16 @@ export default function AktivitaetDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-
   const aktivitaet = DEMO_AKTIVITAETEN.find((a) => a.id === id);
+  const HEADER_HEIGHT = 44 + insets.top;
+  const verfuegbareHoehe = height - insets.bottom;
 
-  // Verfügbare Höhe: wie im Treffen-Tab, aber Header (≈44) berücksichtigen
-  const verfuegbareHoehe = height - insets.top - insets.bottom - 44;
-
-  if (!aktivitaet) {
-    return (
-      <View style={styles.container}>
-        <Stack.Screen options={{ title: "Aktivität" }} />
-        <Text style={styles.leerText}>Aktivität nicht gefunden.</Text>
-      </View>
-    );
-  }
+  if (!aktivitaet) return null;
 
   return (
-    <View style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: "#fff" }}>
       <Stack.Screen options={{ title: aktivitaet.titel }} />
-      <AktivitaetKarte
-        item={aktivitaet}
-        verfuegbareHoehe={verfuegbareHoehe}
-        topInset={0}
-      />
+      <AktivitaetKarte item={aktivitaet} verfuegbareHoehe={verfuegbareHoehe} headerHoehe={HEADER_HEIGHT} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  leerText: {
-    color: "#8E8E93",
-    textAlign: "center",
-    marginTop: 40,
-    fontSize: 14,
-  },
-});
