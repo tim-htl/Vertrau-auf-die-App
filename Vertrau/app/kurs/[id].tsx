@@ -10,6 +10,16 @@ import {
 } from "react-native";
 import { DEMO_STUDIENGANG, type Teilnehmer } from "../../data/kurse";
 
+// ─── Lerngruppen (werden später aus dem Backend geladen) ──────────────────────
+
+type Lerngruppe = {
+  id: string;
+  name: string;
+  mitgliederAnzahl: number;
+};
+
+const DEMO_LERNGRUPPEN: Lerngruppe[] = [];
+
 // ─── Einzelne Teilnehmer-Zeile ────────────────────────────────────────────────
 
 function TeilnehmerZeile({
@@ -42,12 +52,47 @@ function TeilnehmerZeile({
 
 // ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
+function LerngruppenZeile({
+  gruppe,
+  onPress,
+}: {
+  gruppe: Lerngruppe;
+  onPress?: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.zeile}
+      activeOpacity={onPress ? 0.6 : 1}
+      onPress={onPress}
+    >
+      <View style={[styles.avatar, styles.gruppeIcon]}>
+        <Ionicons name="people" size={22} color="#fff" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.name} numberOfLines={1}>
+          {gruppe.name}
+        </Text>
+        <Text style={styles.gruppeMeta}>
+          {gruppe.mitgliederAnzahl} Mitglieder
+        </Text>
+      </View>
+      {onPress && <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />}
+    </TouchableOpacity>
+  );
+}
+
 export default function KursDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
   const kurs = DEMO_STUDIENGANG.meineKurse.find((k) => k.id === id);
   const teilnehmer = kurs?.teilnehmer ?? [];
+  const lerngruppen = DEMO_LERNGRUPPEN;
+
+  // Lerngruppe erstellen (Funktionalität folgt später)
+  function lerngruppeErstellen() {
+    // TODO: Lerngruppen-Erstellungs-Flow implementieren
+  }
 
   return (
     <View style={styles.container}>
@@ -61,6 +106,35 @@ export default function KursDetailScreen() {
             {kurs.ects} ECTS
             {kurs.semester !== undefined && ` · ${kurs.semester}. Semester`}
           </Text>
+        )}
+      </View>
+
+      {/* Lerngruppen-Sektion */}
+      <View style={styles.sektionKopf}>
+        <Text style={[styles.sektionTitel, styles.sektionTitelInKopf]}>
+          Lerngruppen ({lerngruppen.length})
+        </Text>
+        <TouchableOpacity
+          style={styles.erstellenButton}
+          onPress={lerngruppeErstellen}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="add" size={16} color="#007AFF" />
+          <Text style={styles.erstellenButtonText}>Lerngruppe erstellen</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.liste}>
+        {lerngruppen.length === 0 ? (
+          <View style={styles.leer}>
+            <Text style={styles.leerText}>Noch keine Lerngruppen.</Text>
+          </View>
+        ) : (
+          lerngruppen.map((gruppe, index) => (
+            <View key={gruppe.id}>
+              {index > 0 && <View style={styles.trenner} />}
+              <LerngruppenZeile gruppe={gruppe} />
+            </View>
+          ))
         )}
       </View>
 
@@ -176,5 +250,39 @@ const styles = StyleSheet.create({
   leerText: {
     color: "#8E8E93",
     fontSize: 14,
+  },
+  sektionKopf: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginTop: 24,
+    marginBottom: 7,
+    marginHorizontal: 20,
+  },
+  sektionTitelInKopf: {
+    marginTop: 0,
+    marginBottom: 0,
+    marginHorizontal: 0,
+  },
+  erstellenButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+  },
+  erstellenButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#007AFF",
+  },
+  gruppeIcon: {
+    backgroundColor: "#007AFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  gruppeMeta: {
+    fontSize: 12,
+    color: "#8E8E93",
+    marginTop: 2,
   },
 });

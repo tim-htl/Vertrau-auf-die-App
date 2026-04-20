@@ -62,6 +62,7 @@ export default function ChatDetailScreen() {
 
   const chat = INITIAL_CHATS.find((c) => c.id === id);
   const istGruppe = chat?.linkType === "activity";
+  const istPersonenChat = chat?.linkType === "person";
 
   // Nachrichten laden
   useEffect(() => {
@@ -101,6 +102,11 @@ export default function ChatDetailScreen() {
     } else if (chat.linkType === "activity") {
       router.push(`/aktivitaet/${chat.linkId}`);
     }
+  }
+
+  // Treffen vorschlagen (Funktionalität folgt später)
+  function treffenVorschlagen() {
+    // TODO: Treffen-Vorschlag-Flow implementieren
   }
 
   // Nachricht senden
@@ -171,6 +177,20 @@ export default function ChatDetailScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
+        {/* Aktionsleiste unterhalb des Headers – nur bei 1:1-Personen-Chats */}
+        {istPersonenChat && (
+          <View style={styles.aktionsLeiste}>
+            <TouchableOpacity
+              style={styles.aktionsButton}
+              onPress={treffenVorschlagen}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="calendar-outline" size={16} color="#007AFF" />
+              <Text style={styles.aktionsButtonText}>Treffen vorschlagen</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Nachrichtenliste */}
         <FlatList
           ref={flatListRef}
@@ -338,5 +358,27 @@ const styles = StyleSheet.create({
   },
   sendenButtonDisabled: {
     backgroundColor: "#c0d8f7",
+  },
+  aktionsLeiste: {
+    backgroundColor: "#fff",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#ddd",
+    alignItems: "center",
+  },
+  aktionsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: "#eaf3ff",
+  },
+  aktionsButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#007AFF",
   },
 });
