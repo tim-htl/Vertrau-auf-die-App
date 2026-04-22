@@ -1,11 +1,23 @@
 // ─── Typen ────────────────────────────────────────────────────────────────────
 
+export type ProposalStatus = "pending" | "accepted" | "declined";
+
+export type MessageProposal = {
+  coverbild: string;
+  locationId?: string;
+  aktivitaet: string;
+  datum: string; // frei formatiert, z.B. "25/04/2026"
+  uhrzeit: string; // frei formatiert, z.B. "19:30"
+  status?: ProposalStatus;
+};
+
 export type Message = {
   id: string;
-  text: string;
   fromMe: boolean;
   time: string; // "HH:MM"
   senderName?: string; // nur in Gruppen-Chats: Anzeigename des Absenders
+  text?: string; // bei Textnachrichten gesetzt
+  proposal?: MessageProposal; // bei Treffensvorschlägen gesetzt
 };
 
 export type ChatItem = {
@@ -58,6 +70,20 @@ export const INITIAL_CHATS: ChatItem[] = [
       { id: "p1m1", text: "Hey, hast du die Vorlesung heute besucht?", fromMe: false, time: "09:15" },
       { id: "p1m2", text: "Nein leider nicht – kannst du mir die Notizen schicken?", fromMe: true, time: "09:20" },
       { id: "p1m3", text: "Natürlich, schick ich dir gleich! 📝", fromMe: false, time: "09:21" },
+      {
+        id: "p1m4",
+        fromMe: false,
+        time: "18:42",
+        proposal: {
+          coverbild:
+            "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=400",
+          locationId: "loc1",
+          aktivitaet: "Gamestate",
+          datum: "26/04/2026",
+          uhrzeit: "19:30",
+          status: "pending",
+        },
+      },
     ],
   },
   {
