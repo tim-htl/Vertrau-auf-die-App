@@ -20,7 +20,7 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { type Message } from "../../data/chats";
+import { type Message, type ProposalStatus } from "../../data/chats";
 import { DEMO_LOCATIONS } from "../../data/locations";
 
 const STORAGE_PREFIX = "messages_v3_";
@@ -131,7 +131,23 @@ async function oeffneInKarten(
 // ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
 export default function LocationDetailScreen() {
-  const { id, chatId } = useLocalSearchParams<{ id: string; chatId?: string }>();
+  const {
+    id,
+    chatId,
+    proposalMessageId,
+    proposalDatum,
+    proposalUhrzeit,
+    proposalStatus,
+    proposalVonMir,
+  } = useLocalSearchParams<{
+    id: string;
+    chatId?: string;
+    proposalMessageId?: string;
+    proposalDatum?: string;
+    proposalUhrzeit?: string;
+    proposalStatus?: ProposalStatus;
+    proposalVonMir?: string;
+  }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -145,6 +161,18 @@ export default function LocationDetailScreen() {
   const [datumOffen, setDatumOffen] = useState(false);
   const [uhrzeitOffen, setUhrzeitOffen] = useState(false);
 
+  const istVorschlagsInfoAnsicht =
+    !!chatId && !!proposalMessageId && !!proposalDatum && !!proposalUhrzeit;
+  const vorschlagVonMir = proposalVonMir === "1" || proposalVonMir === "true";
+  const aktuellerProposalStatus: ProposalStatus =
+    proposalStatus === "accepted" || proposalStatus === "declined"
+      ? proposalStatus
+      : "pending";
+  const darfAntworten =
+    istVorschlagsInfoAnsicht &&
+    !vorschlagVonMir &&
+    aktuellerProposalStatus === "pending";
+
   if (!location) {
     return (
       <View style={styles.container}>
@@ -154,7 +182,8 @@ export default function LocationDetailScreen() {
     );
   }
 
-  const darfVorschlagen = datum !== null && uhrzeit !== null && !!chatId;
+  const darfVorschlagen =
+    !istVorschlagsInfoAnsicht && datum !== null && uhrzeit !== null && !!chatId;
 
   // Inline-Picker: beim Öffnen direkt einen Startwert setzen, damit der Spinner
   // nicht "leer" wirkt und der Nutzer direkt drehen kann.
@@ -228,6 +257,34 @@ export default function LocationDetailScreen() {
     }
   }
 
+  async function aufEinladungAntworten(antwort: ProposalStatus) {
+    if (
+      !istVorschlagsInfoAnsicht ||
+      vorschlagVonMir ||
+      !chatId ||
+      !proposalMessageId
+    ) {
+      return;
+    }
+
+    const key = STORAGE_PREFIX + chatId;
+    const gespeichert = await AsyncStorage.getItem(key);
+    if (!gespeichert) {
+      router.back();
+      return;
+    }
+
+    const bestehend: Message[] = JSON.parse(gespeichert);
+    const aktualisiert = bestehend.map((m) =>
+      m.id === proposalMessageId && m.proposal
+        ? { ...m, proposal: { ...m.proposal, status: antwort } }
+        : m
+    );
+
+    await AsyncStorage.setItem(key, JSON.stringify(aktualisiert));
+    router.back();
+  }
+
   return (
     <>
       <Stack.Screen options={{ title: location.name }} />
@@ -291,100 +348,159 @@ export default function LocationDetailScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Datum */}
-        <TouchableOpacity
-          style={styles.feldBlock}
-          onPress={toggleDatum}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.feldLabel}>Datum</Text>
-          <View style={styles.feldWert}>
-            <Text
-              style={[
-                styles.feldWertText,
-                !datum && styles.feldWertTextPlaceholder,
-                datumOffen && styles.feldWertTextAktiv,
-              ]}
-            >
-              {datum ? formatDatum(datum) : "Datum auswählen"}
-            </Text>
-            <Ionicons
-              name={datumOffen ? "chevron-down" : "chevron-forward"}
-              size={18}
-              color={datumOffen ? "#007AFF" : "#b0b0b8"}
-            />
-          </View>
-        </TouchableOpacity>
-        {datumOffen && (
-          <View style={styles.pickerInline}>
-            <DateTimePicker
-              value={datum ?? new Date()}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              locale="de-DE"
-              onChange={onDatumChange}
-              themeVariant="light"
-            />
-          </View>
-        )}
+        {istVorschlagsInfoAnsicht ? (
+          <>
+            {/* Datum/Uhrzeit aus dem geöffneten Vorschlag (nicht editierbar) */}
+            <View style={styles.feldBlock}>
+              <Text style={styles.feldLabel}>Datum</Text>
+              <View style={styles.feldWert}>
+                <Text style={styles.feldWertText}>{proposalDatum}</Text>
+              </View>
+            </View>
 
-        {/* Uhrzeit */}
-        <TouchableOpacity
-          style={styles.feldBlock}
-          onPress={toggleUhrzeit}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.feldLabel}>Uhrzeit</Text>
-          <View style={styles.feldWert}>
-            <Text
-              style={[
-                styles.feldWertText,
-                !uhrzeit && styles.feldWertTextPlaceholder,
-                uhrzeitOffen && styles.feldWertTextAktiv,
-              ]}
-            >
-              {uhrzeit ? formatUhrzeit(uhrzeit) : "Uhrzeit auswählen"}
-            </Text>
-            <Ionicons
-              name={uhrzeitOffen ? "chevron-down" : "chevron-forward"}
-              size={18}
-              color={uhrzeitOffen ? "#007AFF" : "#b0b0b8"}
-            />
-          </View>
-        </TouchableOpacity>
-        {uhrzeitOffen && (
-          <View style={styles.pickerInline}>
-            <DateTimePicker
-              value={uhrzeit ?? new Date()}
-              mode="time"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              locale="de-DE"
-              is24Hour
-              onChange={onUhrzeitChange}
-              themeVariant="light"
-            />
-          </View>
-        )}
+            <View style={styles.feldBlock}>
+              <Text style={styles.feldLabel}>Uhrzeit</Text>
+              <View style={styles.feldWert}>
+                <Text style={styles.feldWertText}>{proposalUhrzeit}</Text>
+              </View>
+            </View>
 
-        {/* Vorschlagen */}
-        <View style={styles.vorschlagenWrapper}>
-          <TouchableOpacity
-            style={[
-              styles.vorschlagenButton,
-              !darfVorschlagen && styles.vorschlagenButtonDisabled,
-            ]}
-            onPress={vorschlagen}
-            disabled={!darfVorschlagen}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.vorschlagenText}>Vorschlagen</Text>
-          </TouchableOpacity>
-          {!chatId && (
-            <Text style={styles.hinweisText}>
-              Öffne diesen Screen aus einem Chat, um einen Vorschlag zu senden.
-            </Text>
-          )}
-        </View>
+            <View style={styles.vorschlagenWrapper}>
+              {darfAntworten ? (
+                <View style={styles.einladungAktionen}>
+                  <TouchableOpacity
+                    style={[styles.einladungButton, styles.einladungAblehnen]}
+                    onPress={() => aufEinladungAntworten("declined")}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.einladungAblehnenText}>Ablehnen</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.einladungButton, styles.einladungAnnehmen]}
+                    onPress={() => aufEinladungAntworten("accepted")}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.einladungAnnehmenText}>Annehmen</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text
+                  style={[
+                    styles.einladungsStatusText,
+                    aktuellerProposalStatus === "accepted"
+                      ? styles.einladungsStatusAngenommen
+                      : aktuellerProposalStatus === "declined"
+                      ? styles.einladungsStatusAbgelehnt
+                      : styles.einladungsStatusWartend,
+                  ]}
+                >
+                  {aktuellerProposalStatus === "accepted"
+                    ? "Angekommen"
+                    : aktuellerProposalStatus === "declined"
+                    ? "Abgelehnt"
+                    : "Warten auf Antwort"}
+                </Text>
+              )}
+            </View>
+          </>
+        ) : (
+          <>
+            {/* Datum */}
+            <TouchableOpacity
+              style={styles.feldBlock}
+              onPress={toggleDatum}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.feldLabel}>Datum</Text>
+              <View style={styles.feldWert}>
+                <Text
+                  style={[
+                    styles.feldWertText,
+                    !datum && styles.feldWertTextPlaceholder,
+                    datumOffen && styles.feldWertTextAktiv,
+                  ]}
+                >
+                  {datum ? formatDatum(datum) : "Datum auswählen"}
+                </Text>
+                <Ionicons
+                  name={datumOffen ? "chevron-down" : "chevron-forward"}
+                  size={18}
+                  color={datumOffen ? "#007AFF" : "#b0b0b8"}
+                />
+              </View>
+            </TouchableOpacity>
+            {datumOffen && (
+              <View style={styles.pickerInline}>
+                <DateTimePicker
+                  value={datum ?? new Date()}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  locale="de-DE"
+                  onChange={onDatumChange}
+                  themeVariant="light"
+                />
+              </View>
+            )}
+
+            {/* Uhrzeit */}
+            <TouchableOpacity
+              style={styles.feldBlock}
+              onPress={toggleUhrzeit}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.feldLabel}>Uhrzeit</Text>
+              <View style={styles.feldWert}>
+                <Text
+                  style={[
+                    styles.feldWertText,
+                    !uhrzeit && styles.feldWertTextPlaceholder,
+                    uhrzeitOffen && styles.feldWertTextAktiv,
+                  ]}
+                >
+                  {uhrzeit ? formatUhrzeit(uhrzeit) : "Uhrzeit auswählen"}
+                </Text>
+                <Ionicons
+                  name={uhrzeitOffen ? "chevron-down" : "chevron-forward"}
+                  size={18}
+                  color={uhrzeitOffen ? "#007AFF" : "#b0b0b8"}
+                />
+              </View>
+            </TouchableOpacity>
+            {uhrzeitOffen && (
+              <View style={styles.pickerInline}>
+                <DateTimePicker
+                  value={uhrzeit ?? new Date()}
+                  mode="time"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  locale="de-DE"
+                  is24Hour
+                  onChange={onUhrzeitChange}
+                  themeVariant="light"
+                />
+              </View>
+            )}
+
+            {/* Vorschlagen */}
+            <View style={styles.vorschlagenWrapper}>
+              <TouchableOpacity
+                style={[
+                  styles.vorschlagenButton,
+                  !darfVorschlagen && styles.vorschlagenButtonDisabled,
+                ]}
+                onPress={vorschlagen}
+                disabled={!darfVorschlagen}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.vorschlagenText}>Vorschlagen</Text>
+              </TouchableOpacity>
+              {!chatId && (
+                <Text style={styles.hinweisText}>
+                  Öffne diesen Screen aus einem Chat, um einen Vorschlag zu senden.
+                </Text>
+              )}
+            </View>
+          </>
+        )}
       </ScrollView>
     </>
   );
@@ -545,6 +661,48 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
+  },
+  einladungAktionen: {
+    flexDirection: "row",
+    width: "100%",
+    gap: 10,
+  },
+  einladungButton: {
+    flex: 1,
+    borderRadius: 22,
+    alignItems: "center",
+    paddingVertical: 13,
+  },
+  einladungAnnehmen: {
+    backgroundColor: "#2ecc71",
+  },
+  einladungAnnehmenText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  einladungAblehnen: {
+    backgroundColor: "#fdecea",
+    borderWidth: 1,
+    borderColor: "#f7c5c0",
+  },
+  einladungAblehnenText: {
+    color: "#c0392b",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  einladungsStatusText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  einladungsStatusAngenommen: {
+    color: "#1f8f4f",
+  },
+  einladungsStatusAbgelehnt: {
+    color: "#c0392b",
+  },
+  einladungsStatusWartend: {
+    color: "#2f6fce",
   },
   hinweisText: {
     marginTop: 10,

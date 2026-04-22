@@ -56,10 +56,12 @@ function VorschlagsKarte({
   nachricht,
   zeigeSender,
   onAntwort,
+  onInfoPress,
 }: {
   nachricht: Message;
   zeigeSender: boolean;
   onAntwort: (antwort: ProposalStatus) => void;
+  onInfoPress: () => void;
 }) {
   const vonMir = nachricht.fromMe;
   const p = nachricht.proposal!;
@@ -115,9 +117,7 @@ function VorschlagsKarte({
           <TouchableOpacity
             style={styles.vorschlagInfo}
             activeOpacity={0.7}
-            onPress={() => {
-              // Info-Detailansicht wird später implementiert.
-            }}
+            onPress={onInfoPress}
           >
             <Ionicons
               name="information-circle-outline"
@@ -265,6 +265,24 @@ export default function ChatDetailScreen() {
     });
   }
 
+  function oeffneVorschlagsInfo(nachricht: Message) {
+    const proposal = nachricht.proposal;
+    if (!proposal?.locationId) return;
+
+    router.push({
+      pathname: "/location/[id]",
+      params: {
+        id: proposal.locationId,
+        chatId: id,
+        proposalMessageId: nachricht.id,
+        proposalDatum: proposal.datum,
+        proposalUhrzeit: proposal.uhrzeit,
+        proposalStatus: proposal.status ?? "pending",
+        proposalVonMir: nachricht.fromMe ? "1" : "0",
+      },
+    });
+  }
+
   // Auf einen Treffens-Vorschlag antworten (Annehmen / Ablehnen)
   async function beantworteProposal(
     nachrichtId: string,
@@ -375,6 +393,7 @@ export default function ChatDetailScreen() {
                 nachricht={item}
                 zeigeSender={senderSichtbar[index] ?? false}
                 onAntwort={(antwort) => beantworteProposal(item.id, antwort)}
+                onInfoPress={() => oeffneVorschlagsInfo(item)}
               />
             ) : (
               <NachrichtBlase
