@@ -3,52 +3,43 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { INITIAL_CHATS, type ChatItem, type Message } from "../../data/chats";
-
-async function ladeNachrichten(chatId: string): Promise<Message[]> {
-  const key = `messages_v2_${chatId}`;
-  const gespeichert = await AsyncStorage.getItem(key);
-  if (gespeichert) return JSON.parse(gespeichert);
-  const initial = INITIAL_CHATS.find((c) => c.id === chatId)?.messages ?? [];
-  await AsyncStorage.setItem(key, JSON.stringify(initial));
-  return initial;
-}
-
-function ChatListItem({ chat, letzteNachricht, onPress }: { chat: ChatItem; letzteNachricht: string; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.item} onPress={onPress} activeOpacity={0.7}>
-      {chat.image ? (
-        <Image source={{ uri: chat.image }} style={styles.avatar} />
-      ) : (
-        <View style={styles.avatarPlatzhalter}>
-          <Ionicons name="person" size={28} color="#fff" style={{ marginTop: 6 }} />
-        </View>
-      )}
-      <View style={styles.textBereich}>
-        <Text style={styles.name} numberOfLines={1}>{chat.name}</Text>
-        <Text style={styles.vorschau} numberOfLines={1}>{letzteNachricht}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
+import { INITIAL_CHATS, type ChatItem } from "../../data/chats";
+import { DEMO_PERSONEN } from "../../data/personen";
 
 export default function ChatScreen() {
   const router = useRouter();
   const headerHeight = useHeaderHeight();
+  const [aktiveChats, setAktiveChats] = useState<ChatItem[]>([]);
   const [letzteNachrichten, setLetzteNachrichten] = useState<Record<string, string>>({});
 
   useFocusEffect(
     useCallback(() => {
       async function laden() {
-        const eintraege: Record<string, string> = {};
-        for (const chat of INITIAL_CHATS) {
-          const nachrichten = await ladeNachrichten(chat.id);
-          const letzte = nachrichten[nachrichten.length - 1];
-          eintraege[chat.id] = letzte ? `${letzte.fromMe ? "Du: " : ""}${letzte.text}` : "";
+        const keys = await AsyncStorage.getAllKeys();
+        const chatKeys = keys.filter(k => k.startsWith("messages_v2_"));
+        const chats: ChatItem[] = [];
+        const vorschauen: Record<string, string> = {};
+
+        for (const key of chatKeys) {
+          const id = key.replace("messages_v2_", "");
+          const raw = await AsyncStorage.getItem(key);
+          const msgs = raw ? JSON.parse(raw) : [];
+          
+          let meta = INITIAL_CHATS.find(c => c.id === id);
+          if (!meta) {
+            const p = DEMO_PERSONEN.find(pers => pers.id === id);
+            if (p) meta = { id: p.id, name: p.name, image: p.bilder[0] || "", messages: [] };
+          }
+
+          if (meta) {
+            chats.push(meta);
+            const letzte = msgs[msgs.length - 1];
+            vorschauen[id] = letzte ? (letzte.fromMe ? "Du: " : "") + letzte.text : "Neues Match! 👋";
+          }
         }
-        setLetzteNachrichten(eintraege);
+        setAktiveChats(chats);
+        setLetzteNachrichten(vorschauen);
       }
       laden();
     }, [])
@@ -57,15 +48,21 @@ export default function ChatScreen() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={INITIAL_CHATS}
+        data={aktiveChats}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingTop: headerHeight }} 
+        contentContainerStyle={{ paddingTop: headerHeight }}
         renderItem={({ item }) => (
-          <ChatListItem
-            chat={item}
-            letzteNachricht={letzteNachrichten[item.id] ?? ""}
-            onPress={() => router.push(`/chat/${item.id}`)}
-          />
+          <TouchableOpacity style={styles.item} onPress={() => router.push(`/chat/${item.id}`)}>
+            {item.image ? (
+              <Image source={{ uri: item.image }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.platzhalter]}><Ionicons name="person" size={24} color="#fff" /></View>
+            )}
+            <View style={styles.textBereich}>
+              <Text style={styles.name}>{item.name}</Text>
+              <Text style={styles.vorschau} numberOfLines={1}>{letzteNachrichten[item.id]}</Text>
+            </View>
+          </TouchableOpacity>
         )}
         ItemSeparatorComponent={() => <View style={styles.trennlinie} />}
       />
@@ -75,11 +72,11 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  item: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#fff" },
+  item: { flexDirection: "row", alignItems: "center", padding: 16 },
   avatar: { width: 54, height: 54, borderRadius: 27 },
-  avatarPlatzhalter: { width: 54, height: 54, borderRadius: 27, backgroundColor: "#b0b0b8", justifyContent: "flex-end", alignItems: "center", overflow: "hidden" },
-  textBereich: { flex: 1, marginLeft: 12, justifyContent: "center" },
-  name: { fontSize: 16, fontWeight: "700", color: "#1a1a1a", marginBottom: 3 },
+  platzhalter: { backgroundColor: "#ccc", justifyContent: "center", alignItems: "center" },
+  textBereich: { flex: 1, marginLeft: 12 },
+  name: { fontSize: 16, fontWeight: "700" },
   vorschau: { fontSize: 14, color: "#888" },
-  trennlinie: { height: StyleSheet.hairlineWidth, backgroundColor: "#e0e0e0", marginLeft: 82 },
+  trennlinie: { height: 1, backgroundColor: "#E5E5EA", marginLeft: 82 }
 });

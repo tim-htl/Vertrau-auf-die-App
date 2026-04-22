@@ -10,7 +10,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: "#007AFF",
         tabBarInactiveTintColor: "#8E8E93",
         tabBarShowLabel: false,
-        // Globaler Blur-Header für ALLE Tabs (gleich dick, gleiche Optik)
+        // Globaler Blur-Header für ALLE Tabs
         headerTransparent: true,
         headerBackground: () => (
           <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
