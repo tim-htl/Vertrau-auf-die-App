@@ -68,7 +68,12 @@ const styles = StyleSheet.create({
   sektionTitel: { fontSize: 13, fontWeight: "500", color: "#6D6D72", textTransform: "uppercase", marginTop: 26, marginBottom: 7, marginHorizontal: 20 },
   sektion: { backgroundColor: "#fff", borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: "#d1d1d6" },
   zeile: { flexDirection: "row", alignItems: "center", paddingVertical: 13, paddingHorizontal: 16 },
-  zeileTrenner: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#d1d1d6", marginLeft: 16 },
+  zeileTrenner: { 
+    borderBottomWidth: StyleSheet.hairlineWidth, 
+    borderBottomColor: "#d1d1d6", 
+    marginLeft: 16, 
+    paddingLeft: 0 // FIX: Sichert, dass der Text trotz Margin bündig bleibt
+  },
   zeileText: { flex: 1 },
   zeileTitel: { fontSize: 16, color: "#1a1a1a", fontWeight: "500" },
   zeileUntertitel: { fontSize: 13, color: "#8E8E93", marginTop: 2 },
