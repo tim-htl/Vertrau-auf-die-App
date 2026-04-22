@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Stack } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   FlatList,
@@ -14,42 +14,48 @@ import { DEMO_LOCATIONS } from "../data/locations";
 
 type Modus = "zuZweit" | "gruppe";
 
-// ─── Eine Listenzeile ─────────────────────────────────────────────────────────
+// ─── Eine Listenzeile (komplett tapbar) ───────────────────────────────────────
 
 function ListenZeile({
   name,
   coverbild,
-  onInfo,
+  onPress,
 }: {
   name: string;
   coverbild: string;
-  onInfo: () => void;
+  onPress: () => void;
 }) {
   return (
-    <View style={styles.zeile}>
+    <TouchableOpacity
+      style={styles.zeile}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
       <Image source={{ uri: coverbild }} style={styles.cover} />
       <Text style={styles.name} numberOfLines={1}>
         {name}
       </Text>
-      <TouchableOpacity
-        style={styles.infoButton}
-        onPress={onInfo}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="information-circle-outline" size={16} color="#007AFF" />
-        <Text style={styles.infoButtonText}>Info</Text>
-      </TouchableOpacity>
-    </View>
+      <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />
+    </TouchableOpacity>
   );
 }
 
 // ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
 export default function TreffenVorschlagenScreen() {
+  const router = useRouter();
+  const { chatId } = useLocalSearchParams<{ chatId?: string }>();
   const [modus, setModus] = useState<Modus>("zuZweit");
 
-  function zeigeInfo() {
-    // TODO: Detailansicht öffnen
+  function oeffneLocation(locationId: string) {
+    router.push({
+      pathname: "/location/[id]",
+      params: { id: locationId, ...(chatId ? { chatId } : {}) },
+    });
+  }
+
+  function oeffneAktivitaet(_aktivitaetId: string) {
+    // Detailansicht für Gruppen-Aktivitäten wird später implementiert.
   }
 
   return (
@@ -98,7 +104,7 @@ export default function TreffenVorschlagenScreen() {
               <ListenZeile
                 name={item.name}
                 coverbild={item.coverbild}
-                onInfo={zeigeInfo}
+                onPress={() => oeffneLocation(item.id)}
               />
             )}
             contentContainerStyle={styles.liste}
@@ -111,7 +117,7 @@ export default function TreffenVorschlagenScreen() {
               <ListenZeile
                 name={item.titel}
                 coverbild={item.hintergrundbild}
-                onInfo={zeigeInfo}
+                onPress={() => oeffneAktivitaet(item.id)}
               />
             )}
             contentContainerStyle={styles.liste}
@@ -178,19 +184,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#1a1a1a",
-  },
-  infoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-    backgroundColor: "#eaf3ff",
-  },
-  infoButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#007AFF",
   },
 });

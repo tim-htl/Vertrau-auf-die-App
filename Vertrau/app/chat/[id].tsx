@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Image,
@@ -14,9 +14,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { INITIAL_CHATS, type Message } from "../../data/chats";
+import { INITIAL_CHATS, type Message, type ProposalStatus } from "../../data/chats";
 
-const STORAGE_PREFIX = "messages_v2_";
+const STORAGE_PREFIX = "messages_v3_";
 
 // ─── Einzelne Nachricht ───────────────────────────────────────────────────────
 
@@ -50,6 +50,140 @@ function NachrichtBlase({
   );
 }
 
+// ─── Treffens-Vorschlag als Nachricht ─────────────────────────────────────────
+
+function VorschlagsKarte({
+  nachricht,
+  zeigeSender,
+  onAntwort,
+}: {
+  nachricht: Message;
+  zeigeSender: boolean;
+  onAntwort: (antwort: ProposalStatus) => void;
+}) {
+  const vonMir = nachricht.fromMe;
+  const p = nachricht.proposal!;
+  const status = p.status ?? "pending";
+
+  // Statusfarben: akzeptiert = grün, abgelehnt = rot.
+  const statusFarbe = status === "accepted" ? "#2ecc71" : "#c0392b";
+  // Auf blauem Hintergrund hellere Varianten verwenden.
+  const statusFarbeMir =
+    status === "accepted" ? "#8cf3ba" : "#ffb3ad";
+
+  return (
+    <View
+      style={[
+        styles.vorschlagZeile,
+        vonMir ? styles.vorschlagZeileRechts : styles.vorschlagZeileLinks,
+      ]}
+    >
+      {zeigeSender && !vonMir && nachricht.senderName && (
+        <Text style={styles.senderName}>{nachricht.senderName}</Text>
+      )}
+      <View
+        style={[
+          styles.vorschlagKarte,
+          vonMir ? styles.vorschlagKarteMir : styles.vorschlagKarteAnder,
+        ]}
+      >
+        {/* Kopfzeile: Cover + Name/Datum + Info-Knopf */}
+        <View style={styles.vorschlagKopf}>
+          <Image
+            source={{ uri: p.coverbild }}
+            style={styles.vorschlagCover}
+          />
+          <View style={styles.vorschlagMitte}>
+            <Text
+              style={[
+                styles.vorschlagName,
+                vonMir && styles.vorschlagTextMir,
+              ]}
+              numberOfLines={1}
+            >
+              {p.aktivitaet}
+            </Text>
+            <Text
+              style={[
+                styles.vorschlagZeit,
+                vonMir && styles.vorschlagZeitMir,
+              ]}
+            >
+              {p.datum} · {p.uhrzeit}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.vorschlagInfo}
+            activeOpacity={0.7}
+            onPress={() => {
+              // Info-Detailansicht wird später implementiert.
+            }}
+          >
+            <Ionicons
+              name="information-circle-outline"
+              size={22}
+              color={vonMir ? "#ffffff" : "#007AFF"}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Aktionen bzw. Status */}
+        {status === "pending" && !vonMir ? (
+          // Empfängerseite: Annehmen/Ablehnen
+          <View style={styles.vorschlagAktionen}>
+            <TouchableOpacity
+              style={[styles.vorschlagButton, styles.vorschlagAblehnen]}
+              onPress={() => onAntwort("declined")}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="close" size={16} color="#c0392b" />
+              <Text style={styles.vorschlagAblehnenText}>Ablehnen</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.vorschlagButton, styles.vorschlagAnnehmen]}
+              onPress={() => onAntwort("accepted")}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="checkmark" size={16} color="#fff" />
+              <Text style={styles.vorschlagAnnehmenText}>Annehmen</Text>
+            </TouchableOpacity>
+          </View>
+        ) : status === "pending" && vonMir ? (
+          // Senderseite wartet auf Antwort
+          <View style={styles.vorschlagStatusBlock}>
+            <Ionicons name="time-outline" size={16} color="#ffffff" />
+            <Text style={[styles.vorschlagStatusText, { color: "#ffffff" }]}>
+              Warten auf Antwort
+            </Text>
+          </View>
+        ) : (
+          // Endgültiger Status – beide Seiten
+          <View style={styles.vorschlagStatusBlock}>
+            <Ionicons
+              name={status === "accepted" ? "checkmark-circle" : "close-circle"}
+              size={16}
+              color={vonMir ? statusFarbeMir : statusFarbe}
+            />
+            <Text
+              style={[
+                styles.vorschlagStatusText,
+                { color: vonMir ? statusFarbeMir : statusFarbe },
+              ]}
+            >
+              {status === "accepted" ? "Angenommen" : "Abgelehnt"}
+            </Text>
+          </View>
+        )}
+      </View>
+      <Text
+        style={[styles.zeit, vonMir ? styles.zeitRechts : styles.zeitLinks]}
+      >
+        {nachricht.time}
+      </Text>
+    </View>
+  );
+}
+
 // ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
 export default function ChatDetailScreen() {
@@ -64,7 +198,7 @@ export default function ChatDetailScreen() {
   const istGruppe = chat?.linkType === "activity";
   const istPersonenChat = chat?.linkType === "person";
 
-  // Nachrichten laden
+  // Nachrichten laden – initial beim ersten Mount
   useEffect(() => {
     async function laden() {
       const key = STORAGE_PREFIX + id;
@@ -79,6 +213,26 @@ export default function ChatDetailScreen() {
     }
     laden();
   }, [id]);
+
+  // Nachrichten bei jedem Fokus neu aus AsyncStorage lesen – damit von anderen
+  // Screens (z.B. Treffens-Vorschlag) angehängte Nachrichten sofort erscheinen.
+  useFocusEffect(
+    useCallback(() => {
+      let abgebrochen = false;
+      async function neuLaden() {
+        const key = STORAGE_PREFIX + id;
+        const gespeichert = await AsyncStorage.getItem(key);
+        if (abgebrochen) return;
+        if (gespeichert) {
+          setNachrichten(JSON.parse(gespeichert));
+        }
+      }
+      neuLaden();
+      return () => {
+        abgebrochen = true;
+      };
+    }, [id])
+  );
 
   // Für jede Nachricht entscheiden, ob der Sendername angezeigt wird
   // (nur in Gruppen-Chats, nur bei Senderwechsel – WhatsApp-Stil).
@@ -105,7 +259,27 @@ export default function ChatDetailScreen() {
   }
 
   function treffenVorschlagen() {
-    router.push("/treffen-vorschlagen");
+    router.push({
+      pathname: "/treffen-vorschlagen",
+      params: { chatId: id },
+    });
+  }
+
+  // Auf einen Treffens-Vorschlag antworten (Annehmen / Ablehnen)
+  async function beantworteProposal(
+    nachrichtId: string,
+    antwort: ProposalStatus
+  ) {
+    const aktualisiert = nachrichten.map((m) =>
+      m.id === nachrichtId && m.proposal
+        ? { ...m, proposal: { ...m.proposal, status: antwort } }
+        : m
+    );
+    setNachrichten(aktualisiert);
+    await AsyncStorage.setItem(
+      STORAGE_PREFIX + id,
+      JSON.stringify(aktualisiert)
+    );
   }
 
   // Nachricht senden
@@ -195,12 +369,20 @@ export default function ChatDetailScreen() {
           ref={flatListRef}
           data={nachrichten}
           keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => (
-            <NachrichtBlase
-              nachricht={item}
-              zeigeSender={senderSichtbar[index] ?? false}
-            />
-          )}
+          renderItem={({ item, index }) =>
+            item.proposal ? (
+              <VorschlagsKarte
+                nachricht={item}
+                zeigeSender={senderSichtbar[index] ?? false}
+                onAntwort={(antwort) => beantworteProposal(item.id, antwort)}
+              />
+            ) : (
+              <NachrichtBlase
+                nachricht={item}
+                zeigeSender={senderSichtbar[index] ?? false}
+              />
+            )
+          }
           contentContainerStyle={styles.liste}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
@@ -379,5 +561,111 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#007AFF",
+  },
+
+  // ─── Treffens-Vorschlag ────────────────────────────────────────────────────
+  vorschlagZeile: {
+    marginVertical: 4,
+    maxWidth: "88%",
+  },
+  vorschlagZeileLinks: {
+    alignSelf: "flex-start",
+  },
+  vorschlagZeileRechts: {
+    alignSelf: "flex-end",
+  },
+  vorschlagKarte: {
+    borderRadius: 14,
+    padding: 10,
+    minWidth: 260,
+  },
+  vorschlagKarteAnder: {
+    backgroundColor: "#fff",
+    borderBottomLeftRadius: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  vorschlagKarteMir: {
+    backgroundColor: "#007AFF",
+    borderBottomRightRadius: 4,
+  },
+  vorschlagKopf: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  vorschlagCover: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: "#e5e5ea",
+  },
+  vorschlagMitte: {
+    flex: 1,
+    minWidth: 0,
+  },
+  vorschlagName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1a1a1a",
+  },
+  vorschlagTextMir: {
+    color: "#fff",
+  },
+  vorschlagZeit: {
+    fontSize: 13,
+    color: "#6b6b70",
+    marginTop: 2,
+  },
+  vorschlagZeitMir: {
+    color: "#dbeafe",
+  },
+  vorschlagInfo: {
+    padding: 4,
+  },
+  vorschlagAktionen: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  vorschlagButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  vorschlagAnnehmen: {
+    backgroundColor: "#2ecc71",
+  },
+  vorschlagAnnehmenText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  vorschlagAblehnen: {
+    backgroundColor: "#fdecea",
+  },
+  vorschlagAblehnenText: {
+    color: "#c0392b",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  vorschlagStatusBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 6,
+    justifyContent: "center",
+  },
+  vorschlagStatusText: {
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

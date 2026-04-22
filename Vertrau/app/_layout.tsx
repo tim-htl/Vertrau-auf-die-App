@@ -11,6 +11,7 @@ export default function RootLayout() {
       <Stack.Screen name="aktivitaet/[id]" options={{ headerBackTitle: "Zurück" }} />
       <Stack.Screen name="modul/[id]" options={{ headerBackTitle: "Zurück" }} />
       <Stack.Screen name="treffen-vorschlagen" options={{ headerBackTitle: "Zurück" }} />
+      <Stack.Screen name="location/[id]" options={{ headerBackTitle: "Zurück" }} />
     </Stack>
   );
 }
