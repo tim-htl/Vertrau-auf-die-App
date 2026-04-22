@@ -104,9 +104,8 @@ export default function ChatDetailScreen() {
     }
   }
 
-  // Treffen vorschlagen (Funktionalität folgt später)
   function treffenVorschlagen() {
-    // TODO: Treffen-Vorschlag-Flow implementieren
+    router.push("/treffen-vorschlagen");
   }
 
   // Nachricht senden
