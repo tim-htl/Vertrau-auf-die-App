@@ -12,17 +12,20 @@ import {
   View,
 } from "react-native";
 import { INITIAL_CHATS, type ChatItem, type Message } from "../../data/chats";
+import { ladeJoinedAktivitaeten } from "../../data/joined";
+import { ladeUserChats } from "../../data/userAktivitaeten";
 
 // ─── Hilfsfunktion: Nachrichten laden ────────────────────────────────────────
 
-async function ladeNachrichten(chatId: string): Promise<Message[]> {
-  const key = `messages_v2_${chatId}`;
+async function ladeNachrichten(
+  chatId: string,
+  initialFallback: Message[]
+): Promise<Message[]> {
+  const key = `messages_v4_${chatId}`;
   const gespeichert = await AsyncStorage.getItem(key);
   if (gespeichert) return JSON.parse(gespeichert);
-  // Erstmalig: Demo-Nachrichten speichern
-  const initial = INITIAL_CHATS.find((c) => c.id === chatId)?.messages ?? [];
-  await AsyncStorage.setItem(key, JSON.stringify(initial));
-  return initial;
+  await AsyncStorage.setItem(key, JSON.stringify(initialFallback));
+  return initialFallback;
 }
 
 // ─── Einzelnes Chat-Listen-Element ───────────────────────────────────────────
@@ -73,17 +76,31 @@ export default function ChatScreen() {
   const [letzteNachrichten, setLetzteNachrichten] = useState<
     Record<string, string>
   >({});
+  const [sichtbareChats, setSichtbareChats] = useState<ChatItem[]>([]);
 
-  // Beim Fokus immer neueste letzte Nachricht laden (auch nach dem Tippen)
+  // Beim Fokus immer neueste letzte Nachricht laden und Aktivitätschats
+  // nach beigetretenen Aktivitäten filtern.
   useFocusEffect(
     useCallback(() => {
       async function laden() {
+        const joined = await ladeJoinedAktivitaeten();
+        const userChats = await ladeUserChats();
+        const alle = [...userChats, ...INITIAL_CHATS];
+        const gefiltert = alle.filter((chat) => {
+          if (chat.linkType !== "activity") return true;
+          return !!chat.linkId && joined.includes(chat.linkId);
+        });
+        setSichtbareChats(gefiltert);
+
         const eintraege: Record<string, string> = {};
-        for (const chat of INITIAL_CHATS) {
-          const nachrichten = await ladeNachrichten(chat.id);
+        for (const chat of gefiltert) {
+          const nachrichten = await ladeNachrichten(chat.id, chat.messages);
           const letzte = nachrichten[nachrichten.length - 1];
+          const vorschau = letzte
+            ? letzte.text ?? (letzte.proposal ? "Treffens-Vorschlag" : "")
+            : "";
           eintraege[chat.id] = letzte
-            ? `${letzte.fromMe ? "Du: " : ""}${letzte.text}`
+            ? `${letzte.fromMe ? "Du: " : ""}${vorschau}`
             : "";
         }
         setLetzteNachrichten(eintraege);
@@ -95,7 +112,7 @@ export default function ChatScreen() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={INITIAL_CHATS}
+        data={sichtbareChats}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <ChatListItem

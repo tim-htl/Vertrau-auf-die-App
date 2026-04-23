@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   FlatList,
   Image,
@@ -9,8 +9,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { DEMO_AKTIVITAETEN } from "../data/aktivitaeten";
+import { DEMO_AKTIVITAETEN, type Aktivitaet } from "../data/aktivitaeten";
 import { DEMO_LOCATIONS } from "../data/locations";
+import { ladeUserAktivitaeten } from "../data/userAktivitaeten";
 
 type Modus = "zuZweit" | "gruppe";
 
@@ -46,6 +47,20 @@ export default function TreffenVorschlagenScreen() {
   const router = useRouter();
   const { chatId } = useLocalSearchParams<{ chatId?: string }>();
   const [modus, setModus] = useState<Modus>("zuZweit");
+  const [userAktivitaeten, setUserAktivitaeten] = useState<Aktivitaet[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let abgebrochen = false;
+      (async () => {
+        const liste = await ladeUserAktivitaeten();
+        if (!abgebrochen) setUserAktivitaeten(liste);
+      })();
+      return () => {
+        abgebrochen = true;
+      };
+    }, [])
+  );
 
   function oeffneLocation(locationId: string) {
     router.push({
@@ -54,8 +69,19 @@ export default function TreffenVorschlagenScreen() {
     });
   }
 
-  function oeffneAktivitaet(_aktivitaetId: string) {
-    // Detailansicht für Gruppen-Aktivitäten wird später implementiert.
+  function oeffneAktivitaet(aktivitaetId: string) {
+    router.push({
+      pathname: "/aktivitaet/[id]",
+      params: {
+        id: aktivitaetId,
+        modus: "vorschlagen",
+        ...(chatId ? { chatId } : {}),
+      },
+    });
+  }
+
+  function oeffneErstellen() {
+    router.push("/aktivitaet/neu");
   }
 
   return (
@@ -111,8 +137,23 @@ export default function TreffenVorschlagenScreen() {
           />
         ) : (
           <FlatList
-            data={DEMO_AKTIVITAETEN}
+            data={[...userAktivitaeten, ...DEMO_AKTIVITAETEN]}
             keyExtractor={(item) => item.id}
+            ListHeaderComponent={
+              <TouchableOpacity
+                style={styles.zeile}
+                onPress={oeffneErstellen}
+                activeOpacity={0.7}
+              >
+                <View style={styles.coverErstellen}>
+                  <Ionicons name="add" size={28} color="#007AFF" />
+                </View>
+                <Text style={[styles.name, styles.nameErstellen]} numberOfLines={1}>
+                  Gruppentreffen erstellen
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />
+              </TouchableOpacity>
+            }
             renderItem={({ item }) => (
               <ListenZeile
                 name={item.titel}
@@ -184,5 +225,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#1a1a1a",
+  },
+  nameErstellen: {
+    color: "#007AFF",
+  },
+  coverErstellen: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    backgroundColor: "#eaf3ff",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

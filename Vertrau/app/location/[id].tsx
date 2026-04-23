@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type Message, type ProposalStatus } from "../../data/chats";
 import { DEMO_LOCATIONS } from "../../data/locations";
 
-const STORAGE_PREFIX = "messages_v3_";
+const STORAGE_PREFIX = "messages_v4_";
 
 // ─── Bilder-Slideshow ─────────────────────────────────────────────────────────
 

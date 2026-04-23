@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   FlatList,
   Image,
@@ -9,16 +10,10 @@ import {
   View,
 } from "react-native";
 import { DEMO_STUDIENGANG, type Teilnehmer } from "../../data/kurse";
-
-// ─── Lerngruppen (werden später aus dem Backend geladen) ──────────────────────
-
-type Lerngruppe = {
-  id: string;
-  name: string;
-  mitgliederAnzahl: number;
-};
-
-const DEMO_LERNGRUPPEN: Lerngruppe[] = [];
+import {
+  ladeUserLerngruppenFuerKurs,
+  type Lerngruppe,
+} from "../../data/userLerngruppen";
 
 // ─── Einzelne Teilnehmer-Zeile ────────────────────────────────────────────────
 
@@ -65,15 +60,22 @@ function LerngruppenZeile({
       activeOpacity={onPress ? 0.6 : 1}
       onPress={onPress}
     >
-      <View style={[styles.avatar, styles.gruppeIcon]}>
-        <Ionicons name="people" size={22} color="#fff" />
-      </View>
+      {gruppe.bilder[0] || gruppe.hintergrundbild ? (
+        <Image
+          source={{ uri: gruppe.bilder[0] ?? gruppe.hintergrundbild }}
+          style={styles.avatar}
+        />
+      ) : (
+        <View style={[styles.avatar, styles.gruppeIcon]}>
+          <Ionicons name="people" size={22} color="#fff" />
+        </View>
+      )}
       <View style={{ flex: 1 }}>
         <Text style={styles.name} numberOfLines={1}>
-          {gruppe.name}
+          {gruppe.titel}
         </Text>
         <Text style={styles.gruppeMeta}>
-          {gruppe.mitgliederAnzahl} Mitglieder
+          {gruppe.teilnehmer.length} Mitglieder
         </Text>
       </View>
       {onPress && <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />}
@@ -84,14 +86,31 @@ function LerngruppenZeile({
 export default function KursDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const [lerngruppen, setLerngruppen] = useState<Lerngruppe[]>([]);
 
   const kurs = DEMO_STUDIENGANG.meineKurse.find((k) => k.id === id);
   const teilnehmer = kurs?.teilnehmer ?? [];
-  const lerngruppen = DEMO_LERNGRUPPEN;
 
-  // Lerngruppe erstellen (Funktionalität folgt später)
+  useFocusEffect(
+    useCallback(() => {
+      let abgebrochen = false;
+      if (!id) return () => {};
+      (async () => {
+        const liste = await ladeUserLerngruppenFuerKurs(id);
+        if (!abgebrochen) setLerngruppen(liste);
+      })();
+      return () => {
+        abgebrochen = true;
+      };
+    }, [id])
+  );
+
   function lerngruppeErstellen() {
-    // TODO: Lerngruppen-Erstellungs-Flow implementieren
+    if (!kurs?.id) return;
+    router.push({
+      pathname: "/aktivitaet/neu",
+      params: { kursId: kurs.id },
+    });
   }
 
   return (
@@ -120,7 +139,7 @@ export default function KursDetailScreen() {
           activeOpacity={0.7}
         >
           <Ionicons name="add" size={16} color="#007AFF" />
-          <Text style={styles.erstellenButtonText}>Lerngruppe erstellen</Text>
+          <Text style={styles.erstellenButtonText}>Lerngruppen erstellen</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.liste}>
@@ -132,7 +151,15 @@ export default function KursDetailScreen() {
           lerngruppen.map((gruppe, index) => (
             <View key={gruppe.id}>
               {index > 0 && <View style={styles.trenner} />}
-              <LerngruppenZeile gruppe={gruppe} />
+              <LerngruppenZeile
+                gruppe={gruppe}
+                onPress={() =>
+                  router.push({
+                    pathname: "/aktivitaet/[id]",
+                    params: { id: gruppe.id },
+                  })
+                }
+              />
             </View>
           ))
         )}
