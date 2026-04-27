@@ -1,53 +1,21 @@
+// Dateiname: app/(tabs)/personen.tsx
+
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { FlatList, Image, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
-import MaskedView from "@react-native-masked-view/masked-view"; // Installation: npx expo install @react-native-masked-view/masked-view
 import Animated, { 
   useAnimatedStyle, 
   useSharedValue, 
   withSpring, 
   interpolate, 
   runOnJS,
-  useDerivedValue
+  Extrapolate
 } from "react-native-reanimated";
 import { DEMO_PERSONEN, type Person } from "../../data/personen";
 
-/**
- * Hilfskomponente für den sich progressiv füllenden Smiley im Hintergrund
- */
-const FillingSmiley = ({ progress, size, limit }: { progress: Animated.SharedValue<number>, size: number, limit: number }) => {
-  const fillProgress = useDerivedValue(() => {
-    // Mapping: Der Smiley füllt sich progressiv, während der Nutzer wischt (bis zum Limit)
-    return interpolate(progress.value, [0, limit], [0, 1], "clamp");
-  });
-
-  const animatedFillStyle = useAnimatedStyle(() => ({
-    height: `${fillProgress.value * 100}%`,
-  }));
-
-  return (
-    <View style={{ width: size, height: size }}>
-      {/* 1. Basis: Der graue Smiley im Hintergrund */}
-      <Ionicons name="happy" size={size} color="#D1D1D6" style={StyleSheet.absoluteFill} />
-      
-      {/* 2. Maske: Gelbe Füllung über dem grauen Smiley */}
-      <MaskedView
-        style={StyleSheet.absoluteFill}
-        maskElement={
-          <View style={styles.maskContainer}>
-            <Ionicons name="happy" size={size} color="black" />
-          </View>
-        }
-      >
-        <View style={styles.fillBackground}>
-          <Animated.View style={[styles.yellowFill, animatedFillStyle]} />
-        </View>
-      </MaskedView>
-    </View>
-  );
-};
+const ICON_SIZE = 40; // Größe des Smileys
 
 /**
  * Karte für eine einzelne Person mit Swipe-Aktion auf dem Fotostreifen
@@ -62,40 +30,65 @@ export function PersonenKarte({ person, breite, hoehe }: { person: Person, breit
   const slotHeight = hoehe / anzahlBilder; 
   const bildKante = Math.min(bildSpalteBreite - 16, slotHeight - 8);
 
+  // Shared Value für die Verschiebung
   const translateX = useSharedValue(0);
   const swipeLimit = bildSpalteBreite * 0.75;
-  const iconSize = 40;
 
-  const onLike = () => { console.log("Geliked:", person.name); };
+  const onLikeAction = () => {
+    console.log(`${person.name} wurde geliked!`);
+  };
 
+  // Geste definieren
   const panGesture = Gesture.Pan()
-    .activeOffsetX(5)
+    .activeOffsetX(5) // Erlaubt vertikales Scrollen der FlatList weiterhin
     .onUpdate((event) => {
+      // Nur nach rechts wischen erlauben (positiver Wert)
       translateX.value = Math.max(0, event.translationX);
     })
     .onEnd((event) => {
       if (event.translationX > swipeLimit) {
+        // Erfolgreicher Swipe: Animation beenden und Aktion auslösen
         translateX.value = withSpring(bildSpalteBreite, {}, () => {
-          runOnJS(onLike)();
+          runOnJS(onLikeAction)();
           translateX.value = withSpring(0);
         });
       } else {
+        // Zurückschnellen
         translateX.value = withSpring(0);
       }
     });
 
+  // Animierter Stil für den Fotostreifen
   const animatedStreifenStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
 
-  // NEU: Stil für den grünen Haken direkt AUF dem Fotostreifen
-  const animatedCheckOnStreifenStyle = useAnimatedStyle(() => {
-    // Der Haken blendet ein und skaliert hoch, sobald das Limit erreicht ist
-    const opacity = interpolate(translateX.value, [swipeLimit * 0.9, swipeLimit], [0, 1], "clamp");
-    const scale = interpolate(translateX.value, [swipeLimit * 0.9, swipeLimit], [0.6, 1], "clamp");
-    
+  // === FÜLL-EFFEKT LOGIK ===
+  
+  // Stil für den Container des gelben Smileys
+  // Wir animieren die HÖHE von 0 auf ICON_SIZE, um den Füll-Effekt zu erzeugen
+  const animatedFillStyle = useAnimatedStyle(() => {
+    const fillHeight = interpolate(
+      translateX.value,
+      [0, swipeLimit], // Eingabe: Swipe-Weg
+      [0, ICON_SIZE],    // Ausgabe: Höhe des gelben Icons
+      Extrapolate.CLAMP  // Verhindert, dass die Höhe größer als das Icon wird
+    );
+
     return {
-      opacity,
+      height: fillHeight,
+    };
+  });
+
+  // Stil für den gesamten Smiley-Container (für leichtes Pulsieren)
+  const animatedIconContainerStyle = useAnimatedStyle(() => {
+    const scale = interpolate(
+      translateX.value, 
+      [0, swipeLimit], 
+      [0.9, 1.2], 
+      Extrapolate.CLAMP
+    );
+    return {
       transform: [{ scale }],
     };
   });
@@ -103,18 +96,32 @@ export function PersonenKarte({ person, breite, hoehe }: { person: Person, breit
   return (
     <View style={{ width: breite, height: hoehe, flexDirection: "row", paddingHorizontal: seitenPadding }}>
       
-      {/* Hintergrund-Ebene: Der Smiley, der sich progressiv füllt */}
+      {/* Hintergrund-Ebene: Der Smiley, der sich füllt */}
       <View style={[styles.swipeBackground, { width: bildSpalteBreite }]}>
-        <View style={styles.centerIcon}>
-          <FillingSmiley progress={translateX} size={iconSize} limit={swipeLimit} />
-        </View>
+        <Animated.View style={[styles.iconWrapper, animatedIconContainerStyle]}>
+          
+          {/* 1. Das graue Basis-Icon (Hintergrund, immer sichtbar) */}
+          <Ionicons name="happy" size={ICON_SIZE} color="#D1D1D6" />
+
+          {/* 2. Das gelbe Icon in einem animierten Container (Vordergrund) */}
+          {/* overflow: 'hidden' ist entscheidend, damit nur der untere Teil gelb wird */}
+          <Animated.View style={[styles.yellowFillContainer, animatedFillStyle]}>
+            <Ionicons name="happy" size={ICON_SIZE} color="#FFCC00" />
+          </Animated.View>
+
+          {/* 3. Ein grüner Haken, der erscheint, wenn das Limit erreicht ist */}
+          {translateX.value > swipeLimit && (
+            <View style={styles.checkmarkOverlay}>
+              <Ionicons name="checkmark-circle" size={ICON_SIZE} color="#34C759" />
+            </View>
+          )}
+
+        </Animated.View>
       </View>
 
       {/* Vordergrund: Der interaktive Fotostreifen */}
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[styles.fotostreifen, animatedStreifenStyle, { width: bildSpalteBreite }]}>
-          
-          {/* Die Bilder des Streifens */}
           {person.bilder.slice(0, anzahlBilder).map((bild, i) => (
             <View key={i} style={{ height: slotHeight, justifyContent: 'center', alignItems: 'center' }}>
               {bild ? (
@@ -126,12 +133,6 @@ export function PersonenKarte({ person, breite, hoehe }: { person: Person, breit
               )}
             </View>
           ))}
-
-          {/* NEU: Der grüne Haken, der AUF dem Streifen erscheint */}
-          <Animated.View style={[StyleSheet.absoluteFill, styles.checkOverstreifen, animatedCheckOnStreifenStyle]}>
-            <Ionicons name="checkmark-circle" size={50} color="#4CD964" />
-          </Animated.View>
-
         </Animated.View>
       </GestureDetector>
 
@@ -139,19 +140,25 @@ export function PersonenKarte({ person, breite, hoehe }: { person: Person, breit
       <View style={{ width: infoSpalteBreite, paddingLeft: 12, paddingTop: 10 }}>
         <Text style={styles.nameText} numberOfLines={1}>{person.name}</Text>
         <Text style={styles.alterText}>{person.alter} Jahre</Text>
+        
         <View style={styles.trenner} />
+        
         <Text style={styles.infoLabel}>Bio</Text>
         <Text style={styles.infoWert}>{person.kurzbeschreibung}</Text>
+        
         <Text style={[styles.infoLabel, { marginTop: 15 }]}>Uni</Text>
         <Text style={styles.infoWert}>{person.uni}</Text>
+
         <Text style={[styles.infoLabel, { marginTop: 15 }]}>Studiengang</Text>
         <Text style={styles.infoWert}>{person.studiengang}</Text>
+
         <Text style={[styles.infoLabel, { marginTop: 15 }]}>Module</Text>
         <View style={styles.tagReihe}>
           {person.module.map((m, i) => (
             <View key={i} style={styles.tag}><Text style={styles.tagText}>{m}</Text></View>
           ))}
         </View>
+
         <Text style={[styles.infoLabel, { marginTop: 15 }]}>Hobbies</Text>
         <View style={styles.tagReihe}>
           {person.hobbies.map((h, i) => (
@@ -166,7 +173,10 @@ export function PersonenKarte({ person, breite, hoehe }: { person: Person, breit
 export default function PersonenScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const karteHoehe = height - (44 + insets.top) - (49 + insets.bottom);
+  
+  const HEADER_HEIGHT = 44 + insets.top;
+  const TAB_BAR = 49 + insets.bottom;
+  const karteHoehe = height - HEADER_HEIGHT - TAB_BAR;
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
@@ -177,7 +187,7 @@ export default function PersonenScreen() {
         snapToInterval={karteHoehe}
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: 44 + insets.top, paddingBottom: 49 + insets.bottom }}
+        contentContainerStyle={{ paddingTop: HEADER_HEIGHT, paddingBottom: TAB_BAR }}
         renderItem={({ item }) => <PersonenKarte person={item} breite={width} hoehe={karteHoehe} />}
       />
     </View>
@@ -190,7 +200,6 @@ const styles = StyleSheet.create({
     borderRightWidth: 2, 
     borderRightColor: "#D1D1D6",
     zIndex: 2,
-    position: 'relative', // Wichtig für absoluten Haken
   },
   swipeBackground: {
     position: "absolute",
@@ -201,21 +210,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 1,
   },
-  centerIcon: {
+  iconWrapper: {
+    width: ICON_SIZE,
+    height: ICON_SIZE,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // NEU: Stil für den Haken, der ÜBER dem Streifen liegt
-  checkOverstreifen: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(242, 242, 247, 0.8)', // Halbtransparenter Hintergrund, um Bilder leicht zu verdecken
+  yellowFillContainer: {
+    position: 'absolute',
+    bottom: 0, // Wichtig: Füllt von unten auf
+    left: 0,
+    right: 0,
+    overflow: 'hidden', // Schneidet das Icon ab, wenn die Höhe kleiner ist
   },
-  // MaskedView Styles
-  maskContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
-  fillBackground: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
-  yellowFill: { backgroundColor: '#FFCC00', width: '100%' },
-  // Rest
+  checkmarkOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    backgroundColor: '#F2F2F7', // Gleiche Farbe wie der Hintergrund, um den Smiley zu verdecken
+  },
   platzhalter: { backgroundColor: "#C7C7CC", justifyContent: "center", alignItems: "center" },
   nameText: { fontSize: 26, fontWeight: "700", color: "#1a1a1a" },
   alterText: { fontSize: 15, color: "#8E8E93" },
