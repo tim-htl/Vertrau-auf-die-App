@@ -4,7 +4,8 @@ export type ProposalStatus = "pending" | "accepted" | "declined";
 
 export type MessageProposal = {
   coverbild: string;
-  locationId?: string;
+  locationId?: string; // bei Zu-zweit-Vorschlägen gesetzt
+  aktivitaetId?: string; // bei Gruppentreffen-Vorschlägen gesetzt
   aktivitaet: string;
   datum: string; // frei formatiert, z.B. "25/04/2026"
   uhrzeit: string; // frei formatiert, z.B. "19:30"
@@ -95,6 +96,20 @@ export const INITIAL_CHATS: ChatItem[] = [
     messages: [
       { id: "p2m1", text: "Wollen wir heute Abend zusammen essen gehen?", fromMe: true, time: "12:00" },
       { id: "p2m2", text: "Ja gerne! Um 19 Uhr am Marktplatz?", fromMe: false, time: "12:10" },
+      {
+        id: "p2m3",
+        fromMe: false,
+        time: "17:05",
+        proposal: {
+          coverbild:
+            "https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?w=400",
+          aktivitaetId: "1",
+          aktivitaet: "Volleyball am Strand",
+          datum: "28/04/2026",
+          uhrzeit: "16:00",
+          status: "pending",
+        },
+      },
     ],
   },
   {

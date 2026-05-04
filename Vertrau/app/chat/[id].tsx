@@ -14,9 +14,10 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { INITIAL_CHATS, type Message, type ProposalStatus } from "../../data/chats";
+import { INITIAL_CHATS, type ChatItem, type Message, type ProposalStatus } from "../../data/chats";
+import { ladeUserChats } from "../../data/userAktivitaeten";
 
-const STORAGE_PREFIX = "messages_v3_";
+const STORAGE_PREFIX = "messages_v4_";
 
 // ─── Einzelne Nachricht ───────────────────────────────────────────────────────
 
@@ -56,10 +57,12 @@ function VorschlagsKarte({
   nachricht,
   zeigeSender,
   onAntwort,
+  onInfoPress,
 }: {
   nachricht: Message;
   zeigeSender: boolean;
   onAntwort: (antwort: ProposalStatus) => void;
+  onInfoPress: () => void;
 }) {
   const vonMir = nachricht.fromMe;
   const p = nachricht.proposal!;
@@ -115,9 +118,7 @@ function VorschlagsKarte({
           <TouchableOpacity
             style={styles.vorschlagInfo}
             activeOpacity={0.7}
-            onPress={() => {
-              // Info-Detailansicht wird später implementiert.
-            }}
+            onPress={onInfoPress}
           >
             <Ionicons
               name="information-circle-outline"
@@ -193,8 +194,20 @@ export default function ChatDetailScreen() {
   const flatListRef = useRef<FlatList>(null);
   const [nachrichten, setNachrichten] = useState<Message[]>([]);
   const [eingabe, setEingabe] = useState("");
+  const [chat, setChat] = useState<ChatItem | undefined>(
+    INITIAL_CHATS.find((c) => c.id === id)
+  );
 
-  const chat = INITIAL_CHATS.find((c) => c.id === id);
+  // User-Chats nachladen, falls der Chat nicht in INITIAL_CHATS ist
+  useEffect(() => {
+    if (chat) return;
+    (async () => {
+      const userChats = await ladeUserChats();
+      const gefunden = userChats.find((c) => c.id === id);
+      if (gefunden) setChat(gefunden);
+    })();
+  }, [id, chat]);
+
   const istGruppe = chat?.linkType === "activity";
   const istPersonenChat = chat?.linkType === "person";
 
@@ -263,6 +276,39 @@ export default function ChatDetailScreen() {
       pathname: "/treffen-vorschlagen",
       params: { chatId: id },
     });
+  }
+
+  function oeffneVorschlagsInfo(nachricht: Message) {
+    const proposal = nachricht.proposal;
+    if (!proposal) return;
+
+    const gemeinsameParams = {
+      chatId: id,
+      proposalMessageId: nachricht.id,
+      proposalDatum: proposal.datum,
+      proposalUhrzeit: proposal.uhrzeit,
+      proposalStatus: proposal.status ?? "pending",
+      proposalVonMir: nachricht.fromMe ? "1" : "0",
+    };
+
+    if (proposal.aktivitaetId) {
+      router.push({
+        pathname: "/aktivitaet/[id]",
+        params: {
+          id: proposal.aktivitaetId,
+          modus: "einladung",
+          ...gemeinsameParams,
+        },
+      });
+      return;
+    }
+
+    if (proposal.locationId) {
+      router.push({
+        pathname: "/location/[id]",
+        params: { id: proposal.locationId, ...gemeinsameParams },
+      });
+    }
   }
 
   // Auf einen Treffens-Vorschlag antworten (Annehmen / Ablehnen)
@@ -375,6 +421,7 @@ export default function ChatDetailScreen() {
                 nachricht={item}
                 zeigeSender={senderSichtbar[index] ?? false}
                 onAntwort={(antwort) => beantworteProposal(item.id, antwort)}
+                onInfoPress={() => oeffneVorschlagsInfo(item)}
               />
             ) : (
               <NachrichtBlase

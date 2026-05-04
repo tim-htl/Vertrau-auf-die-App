@@ -1,14 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   FlatList,
   Image,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DEMO_AKTIVITAETEN, type Aktivitaet } from "../../data/aktivitaeten";
+import { ladeUserAktivitaeten } from "../../data/userAktivitaeten";
 
 // ─── Profilbild-Platzhalter (Apple-Stil) ──────────────────────────────────────
 
@@ -43,10 +47,12 @@ export function AktivitaetKarte({
   item,
   verfuegbareHoehe,
   topInset,
+  onPress,
 }: {
   item: Aktivitaet;
   verfuegbareHoehe: number;
   topInset: number;
+  onPress?: () => void;
 }) {
   const { width } = useWindowDimensions();
   const bildHoehe = verfuegbareHoehe * 0.75;
@@ -61,8 +67,13 @@ export function AktivitaetKarte({
     72
   );
 
+  const Wrapper: any = onPress ? TouchableOpacity : View;
+  const wrapperProps = onPress
+    ? { onPress, activeOpacity: 0.9 }
+    : {};
+
   return (
-    <View style={{ height: verfuegbareHoehe }}>
+    <Wrapper style={{ height: verfuegbareHoehe }} {...wrapperProps}>
       {/* Hintergrundbild (75%) */}
       <View style={{ height: bildHoehe, overflow: "hidden" }}>
         <Image
@@ -120,7 +131,7 @@ export function AktivitaetKarte({
         </View>
         <Text style={styles.beschreibung}>{item.beschreibung}</Text>
       </View>
-    </View>
+    </Wrapper>
   );
 }
 
@@ -129,6 +140,26 @@ export function AktivitaetKarte({
 export default function TreffenScreen() {
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const [userAktivitaeten, setUserAktivitaeten] = useState<Aktivitaet[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let abgebrochen = false;
+      (async () => {
+        const liste = await ladeUserAktivitaeten();
+        if (!abgebrochen) setUserAktivitaeten(liste);
+      })();
+      return () => {
+        abgebrochen = true;
+      };
+    }, [])
+  );
+
+  const alleAktivitaeten: Aktivitaet[] = [
+    ...userAktivitaeten,
+    ...DEMO_AKTIVITAETEN,
+  ];
 
   const TAB_BAR_HOEHE = 49;
   // Verfügbare Höhe: Bildschirm minus Tab-Bar und unterer Safe-Area-Bereich.
@@ -136,26 +167,43 @@ export default function TreffenScreen() {
   const verfuegbareHoehe = height - TAB_BAR_HOEHE - insets.bottom;
 
   return (
-    <FlatList
-      data={DEMO_AKTIVITAETEN}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item }) => (
-        <AktivitaetKarte
-          item={item}
-          verfuegbareHoehe={verfuegbareHoehe}
-          topInset={insets.top}
-        />
-      )}
-      pagingEnabled
-      snapToInterval={verfuegbareHoehe}
-      decelerationRate="fast"
-      showsVerticalScrollIndicator={false}
-      getItemLayout={(_, index) => ({
-        length: verfuegbareHoehe,
-        offset: verfuegbareHoehe * index,
-        index,
-      })}
-    />
+    <View style={{ flex: 1 }}>
+      <FlatList
+        data={alleAktivitaeten}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <AktivitaetKarte
+            item={item}
+            verfuegbareHoehe={verfuegbareHoehe}
+            topInset={insets.top}
+            onPress={() =>
+              router.push({
+                pathname: "/aktivitaet/[id]",
+                params: { id: item.id, modus: "teilnehmen" },
+              })
+            }
+          />
+        )}
+        pagingEnabled
+        snapToInterval={verfuegbareHoehe}
+        decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        getItemLayout={(_, index) => ({
+          length: verfuegbareHoehe,
+          offset: verfuegbareHoehe * index,
+          index,
+        })}
+      />
+
+      {/* Floating Action Button: Treffen erstellen */}
+      <TouchableOpacity
+        style={[styles.fab, { bottom: insets.bottom + 16 }]}
+        onPress={() => router.push("/aktivitaet/neu")}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -213,5 +261,20 @@ const styles = StyleSheet.create({
     color: "#444",
     lineHeight: 20,
     flexShrink: 1,
+  },
+  fab: {
+    position: "absolute",
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#007AFF",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
   },
 });

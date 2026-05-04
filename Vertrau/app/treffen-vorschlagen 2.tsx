@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { Stack } from "expo-router";
+import { useState } from "react";
 import {
   FlatList,
   Image,
@@ -9,79 +9,47 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { DEMO_AKTIVITAETEN, type Aktivitaet } from "../data/aktivitaeten";
+import { DEMO_AKTIVITAETEN } from "../data/aktivitaeten";
 import { DEMO_LOCATIONS } from "../data/locations";
-import { ladeUserAktivitaeten } from "../data/userAktivitaeten";
 
 type Modus = "zuZweit" | "gruppe";
 
-// ─── Eine Listenzeile (komplett tapbar) ───────────────────────────────────────
+// ─── Eine Listenzeile ─────────────────────────────────────────────────────────
 
 function ListenZeile({
   name,
   coverbild,
-  onPress,
+  onInfo,
 }: {
   name: string;
   coverbild: string;
-  onPress: () => void;
+  onInfo: () => void;
 }) {
   return (
-    <TouchableOpacity
-      style={styles.zeile}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
+    <View style={styles.zeile}>
       <Image source={{ uri: coverbild }} style={styles.cover} />
       <Text style={styles.name} numberOfLines={1}>
         {name}
       </Text>
-      <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />
-    </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.infoButton}
+        onPress={onInfo}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="information-circle-outline" size={16} color="#007AFF" />
+        <Text style={styles.infoButtonText}>Info</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 // ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
 export default function TreffenVorschlagenScreen() {
-  const router = useRouter();
-  const { chatId } = useLocalSearchParams<{ chatId?: string }>();
   const [modus, setModus] = useState<Modus>("zuZweit");
-  const [userAktivitaeten, setUserAktivitaeten] = useState<Aktivitaet[]>([]);
 
-  useFocusEffect(
-    useCallback(() => {
-      let abgebrochen = false;
-      (async () => {
-        const liste = await ladeUserAktivitaeten();
-        if (!abgebrochen) setUserAktivitaeten(liste);
-      })();
-      return () => {
-        abgebrochen = true;
-      };
-    }, [])
-  );
-
-  function oeffneLocation(locationId: string) {
-    router.push({
-      pathname: "/location/[id]",
-      params: { id: locationId, ...(chatId ? { chatId } : {}) },
-    });
-  }
-
-  function oeffneAktivitaet(aktivitaetId: string) {
-    router.push({
-      pathname: "/aktivitaet/[id]",
-      params: {
-        id: aktivitaetId,
-        modus: "vorschlagen",
-        ...(chatId ? { chatId } : {}),
-      },
-    });
-  }
-
-  function oeffneErstellen() {
-    router.push("/aktivitaet/neu");
+  function zeigeInfo() {
+    // TODO: Detailansicht öffnen
   }
 
   return (
@@ -130,35 +98,20 @@ export default function TreffenVorschlagenScreen() {
               <ListenZeile
                 name={item.name}
                 coverbild={item.coverbild}
-                onPress={() => oeffneLocation(item.id)}
+                onInfo={zeigeInfo}
               />
             )}
             contentContainerStyle={styles.liste}
           />
         ) : (
           <FlatList
-            data={[...userAktivitaeten, ...DEMO_AKTIVITAETEN]}
+            data={DEMO_AKTIVITAETEN}
             keyExtractor={(item) => item.id}
-            ListHeaderComponent={
-              <TouchableOpacity
-                style={styles.zeile}
-                onPress={oeffneErstellen}
-                activeOpacity={0.7}
-              >
-                <View style={styles.coverErstellen}>
-                  <Ionicons name="add" size={28} color="#007AFF" />
-                </View>
-                <Text style={[styles.name, styles.nameErstellen]} numberOfLines={1}>
-                  Gruppentreffen erstellen
-                </Text>
-                <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />
-              </TouchableOpacity>
-            }
             renderItem={({ item }) => (
               <ListenZeile
                 name={item.titel}
                 coverbild={item.hintergrundbild}
-                onPress={() => oeffneAktivitaet(item.id)}
+                onInfo={zeigeInfo}
               />
             )}
             contentContainerStyle={styles.liste}
@@ -226,15 +179,18 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1a1a1a",
   },
-  nameErstellen: {
-    color: "#007AFF",
-  },
-  coverErstellen: {
-    width: 56,
-    height: 56,
-    borderRadius: 8,
-    backgroundColor: "#eaf3ff",
-    justifyContent: "center",
+  infoButton: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 14,
+    backgroundColor: "#eaf3ff",
+  },
+  infoButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#007AFF",
   },
 });
