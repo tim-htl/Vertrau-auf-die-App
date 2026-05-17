@@ -1,5 +1,7 @@
 // Prisma schema for the Vertrau-auf-die-App backend.
-// Models will be added in Phase 1.
+// Real models are added in Phase 1. The placeholder below exists so that
+// `prisma generate` produces a usable client during Phase 0; it gets
+// replaced once the real schema lands.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,4 +11,8 @@ datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
+}
+
+model Placeholder {
+  id Int @id @default(autoincrement())
 }
