@@ -21,6 +21,14 @@ enum Role {
   DEV_ADMIN
 }
 
+enum Abschluss {
+  BACHELOR
+  MASTER
+  STAATSEXAMEN
+  PROMOTION
+  SONSTIGES
+}
+
 model Profile {
   id   String @id @db.Uuid
   role Role   @default(USER)
@@ -31,10 +39,10 @@ model Profile {
   bilder           String[]  @default([])
   hobbies          String[]  @default([])
 
-  // Free-text placeholders until Sub-Phase 1b introduces real
-  // Universitaet / Studiengang tables with FKs.
-  uniName         String?
-  studiengangName String?
+  studiengangId String?      @db.Uuid
+  studiengang   Studiengang? @relation(fields: [studiengangId], references: [id], onDelete: SetNull)
+
+  belegteModule UserModul[]
 
   uniVerified Boolean @default(false)
 
@@ -42,4 +50,93 @@ model Profile {
   updatedAt DateTime @updatedAt
 
   @@map("profiles")
+}
+
+model Universitaet {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @unique
+  kuerzel      String   @unique
+  logoUrl      String?
+  emailDomains String[] @default([])
+
+  studiengaenge Studiengang[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("universitaeten")
+}
+
+model Studiengang {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  abschluss Abschluss
+
+  uniId        String       @db.Uuid
+  universitaet Universitaet @relation(fields: [uniId], references: [id], onDelete: Cascade)
+
+  bereiche Bereich[]
+  profile  Profile[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([uniId, name, abschluss])
+  @@map("studiengaenge")
+}
+
+model Bereich {
+  id   String @id @default(uuid()) @db.Uuid
+  name String
+  // Materialized path of ancestor slugs joined with "/", e.g. "wiwi/bwl".
+  // Always starts with this bereich's own slug at the leaf position.
+  path String
+
+  studiengangId String      @db.Uuid
+  studiengang   Studiengang @relation(fields: [studiengangId], references: [id], onDelete: Cascade)
+
+  parentId String?   @db.Uuid
+  parent   Bereich?  @relation("BereichTree", fields: [parentId], references: [id], onDelete: Cascade)
+  kinder   Bereich[] @relation("BereichTree")
+
+  module Modul[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studiengangId, path])
+  @@index([studiengangId, parentId])
+  @@map("bereiche")
+}
+
+model Modul {
+  id   String  @id @default(uuid()) @db.Uuid
+  name String
+  ects Int?
+  code String?
+
+  bereichId String  @db.Uuid
+  bereich   Bereich @relation(fields: [bereichId], references: [id], onDelete: Cascade)
+
+  belegtVon UserModul[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bereichId, name])
+  @@map("module")
+}
+
+model UserModul {
+  profileId String  @db.Uuid
+  modulId   String  @db.Uuid
+  semester  Int?
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  modul   Modul   @relation(fields: [modulId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([profileId, modulId])
+  @@map("user_module")
 }
