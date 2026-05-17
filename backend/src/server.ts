@@ -2,7 +2,10 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import sensible from "@fastify/sensible";
 import { env } from "./lib/env.js";
+import authPlugin from "./lib/auth.js";
 import { healthRoutes } from "./routes/health.js";
+import { authRoutes } from "./routes/auth.js";
+import { meRoutes } from "./routes/me.js";
 
 async function buildServer() {
   const app = Fastify({
@@ -17,8 +20,11 @@ async function buildServer() {
 
   await app.register(cors, { origin: true });
   await app.register(sensible);
+  await app.register(authPlugin);
 
   await app.register(healthRoutes);
+  await app.register(authRoutes);
+  await app.register(meRoutes);
 
   return app;
 }
