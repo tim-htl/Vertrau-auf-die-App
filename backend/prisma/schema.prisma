@@ -1,0 +1,12 @@
+// Prisma schema for the Vertrau-auf-die-App backend.
+// Models will be added in Phase 1.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}

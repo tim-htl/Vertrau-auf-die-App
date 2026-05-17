@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Editor / tooling local state
+.claude/
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Environment (per-package .env files are also ignored locally)
+.env
+.env.local

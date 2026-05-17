@@ -1,0 +1,14 @@
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+
+# Prisma
+prisma/migrations/dev.db*
+
+# Supabase local dev
+supabase/.branches
+supabase/.temp
