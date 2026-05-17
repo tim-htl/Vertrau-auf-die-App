@@ -1,7 +1,9 @@
 // Prisma schema for the Vertrau-auf-die-App backend.
-// Real models are added in Phase 1. The placeholder below exists so that
-// `prisma generate` produces a usable client during Phase 0; it gets
-// replaced once the real schema lands.
+//
+// `Profile.id` is the same UUID as Supabase's `auth.users.id`. We do not
+// model the auth.users table here (it lives in the `auth` schema and is
+// owned by Supabase). The Profile row is created server-side after sign-in
+// via `POST /auth/sync` and stays 1:1 with the auth user.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,6 +15,31 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model Placeholder {
-  id Int @id @default(autoincrement())
+enum Role {
+  USER
+  EVENT_ADMIN
+  DEV_ADMIN
+}
+
+model Profile {
+  id   String @id @db.Uuid
+  role Role   @default(USER)
+
+  name             String
+  geburtsdatum     DateTime? @db.Date
+  kurzbeschreibung String?
+  bilder           String[]  @default([])
+  hobbies          String[]  @default([])
+
+  // Free-text placeholders until Sub-Phase 1b introduces real
+  // Universitaet / Studiengang tables with FKs.
+  uniName         String?
+  studiengangName String?
+
+  uniVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("profiles")
 }
