@@ -40,6 +40,28 @@ enum EinladungsStatus {
   DECLINED
 }
 
+enum ChatTyp {
+  DIRECT // 1:1 aus gegenseitigem Match — exakt zwei Teilnehmer
+  GROUP  // automatisch aus einer Aktivitaet erzeugt — N Teilnehmer
+}
+
+enum MessageMediaTyp {
+  IMAGE
+  VIDEO
+}
+
+enum LocationKategorie {
+  CAFE
+  RESTAURANT
+  BAR
+  UNI           // Mensa, Bibliothek, Hörsaal
+  SPORT         // Boulderhalle, Gym, Schwimmhalle
+  PARK          // Mauerpark, Tempelhofer Feld
+  KULTUR        // Theater, Museum, Kino
+  ENTERTAINMENT // Gamestate, Bowling, Spielhalle
+  SONSTIGES
+}
+
 model Profile {
   id   String @id @db.Uuid
   role Role   @default(USER)
@@ -59,6 +81,9 @@ model Profile {
   aktivitaetenTeilnahmen  AktivitaetTeilnehmer[]
   aktivitaetenEinladungen AktivitaetEinladung[]  @relation("EinladungEmpfaenger")
   versandteEinladungen    AktivitaetEinladung[]  @relation("EinladungAbsender")
+
+  chatTeilnahmen       ChatTeilnehmer[]
+  gesendeteNachrichten Message[]
 
   uniVerified Boolean @default(false)
 
@@ -185,14 +210,22 @@ model Aktivitaet {
   modulId String? @db.Uuid
   modul   Modul?  @relation(fields: [modulId], references: [id], onDelete: SetNull)
 
-  teilnehmer  AktivitaetTeilnehmer[]
-  einladungen AktivitaetEinladung[]
+  // Optionaler Anker auf eine Default-Location (z. B. Café aus Kooperation).
+  // Bleibt nullable — eigene Adresse hat Vorrang im UI. NULL = freier Ort.
+  locationId String?   @db.Uuid
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  teilnehmer   AktivitaetTeilnehmer[]
+  einladungen  AktivitaetEinladung[]
+  chat         Chat?
+  meetingProposals MeetingProposal[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([sichtbarkeit, startAt])
   @@index([modulId])
+  @@index([locationId])
   @@map("aktivitaeten")
 }
 
@@ -246,4 +279,140 @@ model UserModul {
 
   @@id([profileId, modulId])
   @@map("user_module")
+}
+
+// ── Chat-System ──────────────────────────────────────────────────────────────
+//
+// Chats sind ENTWEDER DIRECT (1:1 aus gegenseitigem Like in Phase 8) ODER
+// GROUP (automatisch aus einer Aktivitaet). Anzeigename wird im Frontend
+// dynamisch abgeleitet — kein name-Feld hier. updatedAt dient als Sortier-
+// Schlüssel für die Chat-Liste ("zuletzt aktiv zuerst").
+model Chat {
+  id  String  @id @default(uuid()) @db.Uuid
+  typ ChatTyp
+
+  // Bei GROUP gesetzt; 1:1-Bezug zur Aktivitaet (unique = max ein Chat pro
+  // Aktivitaet). Bei DIRECT NULL — Postgres erlaubt mehrere NULLs im unique
+  // Index, also kein Konflikt.
+  aktivitaetId String?     @unique @db.Uuid
+  aktivitaet   Aktivitaet? @relation(fields: [aktivitaetId], references: [id], onDelete: Cascade)
+
+  teilnehmer ChatTeilnehmer[]
+  messages   Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("chats")
+}
+
+model ChatTeilnehmer {
+  chatId    String @db.Uuid
+  profileId String @db.Uuid
+
+  joinedAt   DateTime  @default(now())
+  // Self-managed Marker: bis wann hat DIESER User Nachrichten gesehen.
+  // Wird beim Öffnen des Chats vom Backend aktualisiert. Unread-Count berechnet
+  // sich live aus COUNT(messages WHERE createdAt > lastReadAt).
+  lastReadAt DateTime?
+  stumm      Boolean   @default(false)
+
+  chat    Chat    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, profileId])
+  @@index([profileId])
+  @@map("chat_teilnehmer")
+}
+
+model Message {
+  id     String  @id @default(uuid()) @db.Uuid
+  chatId String  @db.Uuid
+  // Nullable + SET NULL: wenn User Account löscht, bleibt Nachricht im
+  // Chatverlauf, Absender wird zu "unbekannt". CASCADE würde Lücken erzeugen.
+  senderId String? @db.Uuid
+
+  text     String?
+  mediaUrl String?
+  mediaTyp MessageMediaTyp?
+
+  createdAt DateTime @default(now())
+
+  chat   Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender Profile? @relation(fields: [senderId], references: [id], onDelete: SetNull)
+
+  meetingProposal MeetingProposal?
+
+  @@index([chatId, createdAt])
+  @@map("messages")
+}
+
+// Treffen-Vorschlag — 1:1-Erweiterung einer Message. Drei Quellen-Modi via
+// Nullable-Spalten (genau eine Quelle pro Vorschlag, von der Application
+// erzwungen): locationId, aktivitaetId, oder custom* Felder.
+//
+// titel + bilder + startAt sind Snapshots am Vorschlags-Zeitpunkt — bleiben
+// stabil, auch wenn die referenzierte Location/Aktivitaet später umbenannt
+// oder gelöscht wird.
+model MeetingProposal {
+  id        String  @id @default(uuid()) @db.Uuid
+  messageId String  @unique @db.Uuid
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  titel   String
+  // bilder[0] = Cover für die Chat-Karte. Bei Location-/Aktivitäts-Quelle
+  // typischerweise genau ein Snapshot-Eintrag, bei Custom mehrere User-Uploads.
+  bilder  String[] @default([])
+  startAt DateTime
+
+  status    EinladungsStatus @default(PENDING)
+  decidedAt DateTime?
+
+  locationId String?   @db.Uuid
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  aktivitaetId String?     @db.Uuid
+  aktivitaet   Aktivitaet? @relation(fields: [aktivitaetId], references: [id], onDelete: SetNull)
+
+  // Nur bei Custom-Vorschlag gesetzt (keine locationId, keine aktivitaetId).
+  customAdresseStrasse String?
+  customAdressePlzOrt  String?
+  customKoordinatenLat Float?
+  customKoordinatenLng Float?
+
+  createdAt DateTime @default(now())
+
+  @@map("meeting_proposals")
+}
+
+// Standort-Katalog: Kooperationspartner (isPartner=true) und allgemeine
+// Default-Plätze. Pre-seeded; weitere via Admin-UI in Phase 7.
+model Location {
+  id           String            @id @default(uuid()) @db.Uuid
+  name         String
+  beschreibung String
+  kategorie    LocationKategorie
+
+  // bilder[0] = Cover. Mehrere Bilder = Slideshow im Detail-View.
+  bilder String[] @default([])
+
+  adresseStrasse String
+  adressePlzOrt  String
+  koordinatenLat Float
+  koordinatenLng Float
+
+  isPartner Boolean @default(false)
+  // Soft-Delete-Flag: Admin kann Location deaktivieren ohne historische
+  // Vorschläge zu reißen. Frontend filtert aktiv=true in der Auswahl.
+  aktiv     Boolean @default(true)
+
+  aktivitaeten Aktivitaet[]
+  proposals    MeetingProposal[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, adresseStrasse])
+  @@index([kategorie, aktiv])
+  @@map("locations")
 }
