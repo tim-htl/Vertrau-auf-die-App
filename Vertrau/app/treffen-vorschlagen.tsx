@@ -81,7 +81,14 @@ export default function TreffenVorschlagenScreen() {
   }
 
   function oeffneErstellen() {
-    router.push("/aktivitaet/neu");
+    router.push("/aktivitaet/standort-waehlen");
+  }
+
+  function oeffneEigenenVorschlag() {
+    router.push({
+      pathname: "/vorschlag-erstellen",
+      params: chatId ? { chatId } : {},
+    });
   }
 
   return (
@@ -126,6 +133,21 @@ export default function TreffenVorschlagenScreen() {
           <FlatList
             data={DEMO_LOCATIONS}
             keyExtractor={(item) => item.id}
+            ListHeaderComponent={
+              <TouchableOpacity
+                style={styles.zeile}
+                onPress={oeffneEigenenVorschlag}
+                activeOpacity={0.7}
+              >
+                <View style={styles.coverErstellen}>
+                  <Ionicons name="add" size={28} color="#007AFF" />
+                </View>
+                <Text style={[styles.name, styles.nameErstellen]} numberOfLines={1}>
+                  Eigenes Treffen erstellen
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />
+              </TouchableOpacity>
+            }
             renderItem={({ item }) => (
               <ListenZeile
                 name={item.name}

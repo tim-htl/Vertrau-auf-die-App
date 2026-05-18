@@ -5,7 +5,7 @@ import { joinAktivitaet } from "./joined";
 
 const AKT_KEY = "user_aktivitaeten_v1";
 const CHAT_KEY = "user_chats_v1";
-const MESSAGES_PREFIX = "messages_v4_";
+export const MESSAGES_PREFIX = "messages_v4_";
 
 // ─── Aktivitäten ──────────────────────────────────────────────────────────────
 
