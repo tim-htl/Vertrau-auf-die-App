@@ -24,7 +24,7 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { type Aktivitaet, type Teilnehmer } from "../../data/aktivitaeten";
+import { type Aktivitaet, type Sichtbarkeit, type Teilnehmer } from "../../data/aktivitaeten";
 import { INITIAL_CHATS } from "../../data/chats";
 import { DEMO_STUDIENGANG } from "../../data/kurse";
 import { DEMO_LOCATIONS } from "../../data/locations";
@@ -211,6 +211,7 @@ export default function AktivitaetNeuScreen() {
   const [uhrzeitOffen, setUhrzeitOffen] = useState(false);
 
   const [maxPlaetze, setMaxPlaetze] = useState("8");
+  const [sichtbarkeit, setSichtbarkeit] = useState<Sichtbarkeit>("public");
   const [einladungsOffen, setEinladungsOffen] = useState(false);
   const [eingeladen, setEingeladen] = useState<string[]>([]);
 
@@ -422,6 +423,7 @@ export default function AktivitaetNeuScreen() {
         uhrzeit: formatUhrzeit(uhrzeit),
         maxPlaetze: maxPlaetzeZahl,
         teilnehmer: [ersteller, ...eingeladeneTeilnehmer],
+        sichtbarkeit,
       };
 
       if (istLerngruppe && kursId) {
@@ -511,6 +513,52 @@ export default function AktivitaetNeuScreen() {
             onChangeText={setBeschreibung}
             multiline
           />
+        </View>
+
+        {/* Sichtbarkeit */}
+        <View style={styles.feldBlock}>
+          <Text style={styles.feldLabel}>Sichtbarkeit</Text>
+          <View style={styles.segmented}>
+            <TouchableOpacity
+              style={[
+                styles.segmentedOption,
+                sichtbarkeit === "public" && styles.segmentedOptionAktiv,
+              ]}
+              onPress={() => setSichtbarkeit("public")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentedText,
+                  sichtbarkeit === "public" && styles.segmentedTextAktiv,
+                ]}
+              >
+                Öffentlich
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.segmentedOption,
+                sichtbarkeit === "private" && styles.segmentedOptionAktiv,
+              ]}
+              onPress={() => setSichtbarkeit("private")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentedText,
+                  sichtbarkeit === "private" && styles.segmentedTextAktiv,
+                ]}
+              >
+                Privat
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.feldHinweis}>
+            {sichtbarkeit === "public"
+              ? "Alle User können beitreten. Du kannst trotzdem Personen einladen."
+              : "Nur eingeladene Personen können beitreten."}
+          </Text>
         </View>
 
         {/* Teilnehmer einladen */}
@@ -1095,5 +1143,40 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
+  },
+  segmented: {
+    flexDirection: "row",
+    backgroundColor: "#f2f2f7",
+    borderRadius: 10,
+    padding: 3,
+    gap: 3,
+  },
+  segmentedOption: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  segmentedOptionAktiv: {
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  segmentedText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6b6b70",
+  },
+  segmentedTextAktiv: {
+    color: "#1a1a1a",
+  },
+  feldHinweis: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#888",
+    lineHeight: 16,
   },
 });

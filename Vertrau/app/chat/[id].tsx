@@ -308,7 +308,19 @@ export default function ChatDetailScreen() {
         pathname: "/location/[id]",
         params: { id: proposal.locationId, ...gemeinsameParams },
       });
+      return;
     }
+
+    // Eigener Vorschlag (kein locationId, kein aktivitaetId) — eigener
+    // Info-Screen, der die customAdresse/-Koordinaten/-Bilder anzeigt.
+    router.push({
+      pathname: "/vorschlag/[id]",
+      params: {
+        id: nachricht.id,
+        chatId: id,
+        proposalVonMir: nachricht.fromMe ? "1" : "0",
+      },
+    });
   }
 
   // Auf einen Treffens-Vorschlag antworten (Annehmen / Ablehnen)
