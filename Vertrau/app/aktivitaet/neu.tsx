@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type Aktivitaet, type Teilnehmer } from "../../data/aktivitaeten";
 import { INITIAL_CHATS } from "../../data/chats";
 import { DEMO_STUDIENGANG } from "../../data/kurse";
+import { DEMO_LOCATIONS } from "../../data/locations";
 import { ladeErstellerAlsTeilnehmer } from "../../data/meinProfil";
 import {
   erstelleAktivitaet,
@@ -146,22 +147,60 @@ function formatUhrzeit(d: Date): string {
 
 // ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
+// Adresse aus DEMO_LOCATIONS in strasse/hausnummer/plz/ort aufsplitten.
+function parseStrasseHausnummer(input: string): {
+  strasse: string;
+  hausnummer: string;
+} {
+  const match = input.match(/^(.+?)\s+(\d+\w*)$/);
+  if (match) return { strasse: match[1].trim(), hausnummer: match[2] };
+  return { strasse: input, hausnummer: "" };
+}
+
+function parsePlzOrt(input: string): { plz: string; ort: string } {
+  const match = input.match(/^(\d{4,5})\s+(.+)$/);
+  if (match) return { plz: match[1], ort: match[2] };
+  return { plz: "", ort: input };
+}
+
 export default function AktivitaetNeuScreen() {
-  const { kursId } = useLocalSearchParams<{ kursId?: string }>();
+  const { kursId, locationId } = useLocalSearchParams<{
+    kursId?: string;
+    locationId?: string;
+  }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const kurs = DEMO_STUDIENGANG.meineKurse.find((k) => k.id === kursId);
   const istLerngruppe = !!kurs;
+  const vorgewaehlteLocation = locationId
+    ? DEMO_LOCATIONS.find((l) => l.id === locationId)
+    : undefined;
 
-  const [bilder, setBilder] = useState<string[]>([]);
+  const [bilder, setBilder] = useState<string[]>(
+    vorgewaehlteLocation ? [vorgewaehlteLocation.coverbild, ...vorgewaehlteLocation.bilder] : []
+  );
   const [titel, setTitel] = useState("");
   const [beschreibung, setBeschreibung] = useState("");
-  const [strasse, setStrasse] = useState("");
-  const [hausnummer, setHausnummer] = useState("");
-  const [plz, setPlz] = useState("");
-  const [ort, setOrt] = useState("");
+  const initStrasseHausnummer = vorgewaehlteLocation
+    ? parseStrasseHausnummer(vorgewaehlteLocation.adresse.strasse)
+    : { strasse: "", hausnummer: "" };
+  const initPlzOrt = vorgewaehlteLocation
+    ? parsePlzOrt(vorgewaehlteLocation.adresse.plzOrt)
+    : { plz: "", ort: "" };
+  const [strasse, setStrasse] = useState(initStrasseHausnummer.strasse);
+  const [hausnummer, setHausnummer] = useState(initStrasseHausnummer.hausnummer);
+  const [plz, setPlz] = useState(initPlzOrt.plz);
+  const [ort, setOrt] = useState(initPlzOrt.ort);
+  // Wenn Adresse aus Location kam, sofort als validiert markieren – Koordinaten
+  // sind im Katalog bereits hinterlegt, kein Geocoding nötig.
   const [adresseValidiert, setAdresseValidiert] = useState<Adresse | null>(
-    null
+    vorgewaehlteLocation
+      ? {
+          strasse: vorgewaehlteLocation.adresse.strasse,
+          plzOrt: vorgewaehlteLocation.adresse.plzOrt,
+          koordinaten: vorgewaehlteLocation.koordinaten,
+        }
+      : null
   );
   const [adressePruefung, setAdressePruefung] = useState(false);
   const [adresseFehler, setAdresseFehler] = useState<string | null>(null);
