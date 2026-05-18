@@ -195,10 +195,10 @@ export default function TreffenScreen() {
         })}
       />
 
-      {/* Floating Action Button: Treffen erstellen */}
+      {/* Floating Action Button: Treffen erstellen (über Standort-Auswahl) */}
       <TouchableOpacity
         style={[styles.fab, { bottom: insets.bottom + 16 }]}
-        onPress={() => router.push("/aktivitaet/neu")}
+        onPress={() => router.push("/aktivitaet/standort-waehlen")}
         activeOpacity={0.85}
       >
         <Ionicons name="add" size={28} color="#fff" />

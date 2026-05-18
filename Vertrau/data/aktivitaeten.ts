@@ -6,6 +6,8 @@ export type Teilnehmer = {
   bild: string | null;
 };
 
+export type Sichtbarkeit = "public" | "private";
+
 export type Aktivitaet = {
   id: string;
   titel: string;
@@ -25,6 +27,9 @@ export type Aktivitaet = {
   uhrzeit: string; // z.B. "16:00"
   maxPlaetze: number;
   teilnehmer: Teilnehmer[];
+  // "public" = jeder kann beitreten (Standard). "private" = nur Eingeladene.
+  // Optional aus Backward-Compat-Gründen mit DEMO_AKTIVITAETEN.
+  sichtbarkeit?: Sichtbarkeit;
 };
 
 // ─── Demo-Daten ───────────────────────────────────────────────────────────────

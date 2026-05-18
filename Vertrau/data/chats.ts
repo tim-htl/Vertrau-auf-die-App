@@ -4,8 +4,13 @@ export type ProposalStatus = "pending" | "accepted" | "declined";
 
 export type MessageProposal = {
   coverbild: string;
-  locationId?: string; // bei Zu-zweit-Vorschlägen gesetzt
+  locationId?: string; // bei Zu-zweit-Vorschlägen über DEMO_LOCATIONS gesetzt
   aktivitaetId?: string; // bei Gruppentreffen-Vorschlägen gesetzt
+  // Bei "Eigenes Treffen vorschlagen" (Zu-zweit, freie Adresse) gesetzt –
+  // weder locationId noch aktivitaetId, sondern komplett eigene Daten.
+  customAdresse?: { strasse: string; plzOrt: string };
+  customKoordinaten?: { latitude: number; longitude: number };
+  customBilder?: string[];
   aktivitaet: string;
   datum: string; // frei formatiert, z.B. "25/04/2026"
   uhrzeit: string; // frei formatiert, z.B. "19:30"
