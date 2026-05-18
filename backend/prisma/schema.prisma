@@ -29,6 +29,17 @@ enum Abschluss {
   SONSTIGES
 }
 
+enum AktivitaetSichtbarkeit {
+  PUBLIC
+  PRIVATE
+}
+
+enum EinladungsStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
 model Profile {
   id   String @id @db.Uuid
   role Role   @default(USER)
@@ -43,6 +54,11 @@ model Profile {
   studiengang   Studiengang? @relation(fields: [studiengangId], references: [id], onDelete: SetNull)
 
   belegteModule UserModul[]
+
+  aktivitaetenAlsAdmin    Aktivitaet[]          @relation("AktivitaetAdmin")
+  aktivitaetenTeilnahmen  AktivitaetTeilnehmer[]
+  aktivitaetenEinladungen AktivitaetEinladung[]  @relation("EinladungEmpfaenger")
+  versandteEinladungen    AktivitaetEinladung[]  @relation("EinladungAbsender")
 
   uniVerified Boolean @default(false)
 
@@ -118,13 +134,104 @@ model Modul {
   bereichId String  @db.Uuid
   bereich   Bereich @relation(fields: [bereichId], references: [id], onDelete: Cascade)
 
-  belegtVon UserModul[]
+  belegtVon   UserModul[]
+  lerngruppen Aktivitaet[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([bereichId, name])
   @@map("module")
+}
+
+// Gruppentreffen UND Lerngruppe in einer Tabelle. Lerngruppe = Aktivitaet
+// mit gesetztem modulId. Status (offen/voll/beendet) wird im Endpoint
+// berechnet und ist KEINE gespeicherte Spalte (single source of truth =
+// teilnehmer.count vs. maxPlaetze + beendetAt). Zu-zweit-Treffen sind
+// hier NICHT modelliert — die leben als proposal-Message in 1e.
+model Aktivitaet {
+  id String @id @default(uuid()) @db.Uuid
+
+  titel        String
+  beschreibung String
+
+  bilder String[] @default([])
+
+  adresseStrasse String
+  adressePlzOrt  String
+  ortKurz        String
+  koordinatenLat Float
+  koordinatenLng Float
+
+  // Startzeitpunkt (Datum + Uhrzeit kombiniert). Dauer in Minuten,
+  // damit Frontend Endzeit ableiten kann.
+  startAt      DateTime
+  dauerMinuten Int
+
+  maxPlaetze   Int
+  sichtbarkeit AktivitaetSichtbarkeit @default(PUBLIC)
+
+  // Wenn gesetzt: explizit als beendet markiert oder durch (startAt + dauer)
+  // in der Vergangenheit. Wird beim Lesen mit aktueller Zeit kombiniert,
+  // um Status zu berechnen.
+  beendetAt DateTime?
+
+  official Boolean @default(false)
+
+  adminId String  @db.Uuid
+  admin   Profile @relation("AktivitaetAdmin", fields: [adminId], references: [id], onDelete: Restrict)
+
+  // Lerngruppe-Verknüpfung. NULL = reines Gruppentreffen.
+  modulId String? @db.Uuid
+  modul   Modul?  @relation(fields: [modulId], references: [id], onDelete: SetNull)
+
+  teilnehmer  AktivitaetTeilnehmer[]
+  einladungen AktivitaetEinladung[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sichtbarkeit, startAt])
+  @@index([modulId])
+  @@map("aktivitaeten")
+}
+
+model AktivitaetTeilnehmer {
+  aktivitaetId String @db.Uuid
+  profileId    String @db.Uuid
+
+  aktivitaet Aktivitaet @relation(fields: [aktivitaetId], references: [id], onDelete: Cascade)
+  profile    Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([aktivitaetId, profileId])
+  @@map("aktivitaet_teilnehmer")
+}
+
+// Einladungen NUR für private Treffen. Public-Treffen brauchen keine
+// Einladungen (jeder kann direkt beitreten -> Eintrag in
+// aktivitaet_teilnehmer). Bei accept wird zusätzlich ein
+// aktivitaet_teilnehmer-Eintrag erzeugt (Application-Logik in Phase 3).
+model AktivitaetEinladung {
+  aktivitaetId String           @db.Uuid
+  profileId    String           @db.Uuid
+  status       EinladungsStatus @default(PENDING)
+
+  // Wer hat eingeladen. NULL falls Einlader seinen Account später löscht
+  // (Einladung bleibt bestehen, Anzeige "von: unbekannt").
+  invitedById String?  @db.Uuid
+
+  aktivitaet Aktivitaet @relation(fields: [aktivitaetId], references: [id], onDelete: Cascade)
+  profile    Profile    @relation("EinladungEmpfaenger", fields: [profileId], references: [id], onDelete: Cascade)
+  invitedBy  Profile?   @relation("EinladungAbsender", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  decidedAt DateTime?
+
+  @@id([aktivitaetId, profileId])
+  @@index([profileId, status])
+  @@map("aktivitaet_einladungen")
 }
 
 model UserModul {
