@@ -1,3 +1,22 @@
+-- ── Shadow-DB-Kompatibilität ───────────────────────────────────────────────
+-- Prismas Shadow-DB zur Migration-Validierung hat das auth-Schema nicht,
+-- das in Supabase von Haus aus existiert. Wir legen es defensiv mit einer
+-- Stub-Funktion an, NUR falls es noch nicht da ist. Auf der echten
+-- Supabase-DB ist der Block ein No-Op — die echte auth.uid() bleibt aktiv.
+CREATE SCHEMA IF NOT EXISTS auth;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'auth' AND p.proname = 'uid'
+  ) THEN
+    CREATE FUNCTION auth.uid() RETURNS UUID LANGUAGE sql STABLE AS $func$ SELECT NULL::UUID $func$;
+  END IF;
+END $$;
+
 -- Phase 1f — Row-Level-Security Policies (SELECT only).
 --
 -- Schreiboperationen (INSERT/UPDATE/DELETE) laufen über unser Backend mit
