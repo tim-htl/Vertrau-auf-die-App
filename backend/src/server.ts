@@ -7,6 +7,7 @@ import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { meRoutes } from "./routes/me.js";
 import { katalogRoutes } from "./routes/katalog.js";
+import { personenRoutes } from "./routes/personen.js";
 
 async function buildServer() {
   const app = Fastify({
@@ -27,6 +28,7 @@ async function buildServer() {
   await app.register(authRoutes);
   await app.register(meRoutes);
   await app.register(katalogRoutes);
+  await app.register(personenRoutes);
 
   return app;
 }
