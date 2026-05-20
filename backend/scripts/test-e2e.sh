@@ -46,6 +46,8 @@ except Exception as e:
 }
 
 # Test-Helper. Args: NAME, EXPECTED_STATUS, METHOD, PATH, BODY (opt), TOKEN (opt)
+# Wichtig: Content-Type: application/json wird NUR gesetzt, wenn ein Body
+# vorhanden ist — sonst lehnt Fastifys Body-Parser leere Bodies ab.
 function api_test() {
   local name="$1"
   local expected="$2"
@@ -54,9 +56,11 @@ function api_test() {
   local body="${5:-}"
   local token="${6:-}"
 
-  local -a args=(-s -o /tmp/e2e_body -w "%{http_code}" -X "$method" "$API$path" -H "Content-Type: application/json")
+  local -a args=(-s -o /tmp/e2e_body -w "%{http_code}" -X "$method" "$API$path")
   [ -n "$token" ] && args+=(-H "Authorization: Bearer $token")
-  [ -n "$body" ] && args+=(-d "$body")
+  if [ -n "$body" ]; then
+    args+=(-H "Content-Type: application/json" -d "$body")
+  fi
 
   local code
   code=$(curl "${args[@]}")
@@ -127,21 +131,48 @@ api_test "GET  /me ohne Auth = 401" 401 GET   "/me"    "" ""
 echo ""
 echo "${BOLD}== 4. Katalog (sollten alle 200 sein, auch ohne Token) ==${RESET}"
 api_test "GET /unis (anon)" 200 GET "/unis" "" ""
-UNIS=$(curl -s "$API/unis")
-UNI_ID=$(echo "$UNIS" | jval "universitaeten.0.id" 2>/dev/null || echo "")
-if [ -z "$UNI_ID" ]; then
-  echo "  ${RED}FATAL: keine Uni in /unis-Response. Seed ggf. fehlgeschlagen.${RESET}"
+
+# Erste Uni mit mindestens einem Studiengang finden (Seed füllt nur TUB,
+# LMU bleibt leer — naives "erste Uni" greift sonst eine ohne Studiengänge).
+UNI_ID=""
+STUDIENGANG_ID=""
+for uid in $(curl -s "$API/unis" | python3 -c "import json,sys
+for u in json.load(sys.stdin)['universitaeten']: print(u['id'])"); do
+  sid=$(curl -s "$API/unis/$uid/studiengaenge" | python3 -c "import json,sys
+sg = json.load(sys.stdin)['studiengaenge']
+print(sg[0]['id'] if sg else '')")
+  if [ -n "$sid" ]; then
+    UNI_ID=$uid
+    STUDIENGANG_ID=$sid
+    break
+  fi
+done
+if [ -z "$UNI_ID" ] || [ -z "$STUDIENGANG_ID" ]; then
+  echo "  ${RED}FATAL: keine Uni mit Studiengängen gefunden. Seed ggf. fehlgeschlagen.${RESET}"
   exit 1
 fi
-echo "  → erste Uni: $UNI_ID"
+echo "  → Uni mit Daten: $UNI_ID"
+echo "  → Studiengang: $STUDIENGANG_ID"
 
 api_test "GET /unis/:id/studiengaenge" 200 GET "/unis/$UNI_ID/studiengaenge" "" ""
-STUDIENGANG_ID=$(curl -s "$API/unis/$UNI_ID/studiengaenge" | jval "studiengaenge.0.id" 2>/dev/null || echo "")
-echo "  → erster Studiengang: $STUDIENGANG_ID"
-
 api_test "GET /studiengang/:id/moduldatenbank" 200 GET "/studiengang/$STUDIENGANG_ID/moduldatenbank" "" ""
-MODUL_ID=$(curl -s "$API/studiengang/$STUDIENGANG_ID/moduldatenbank" | jval "bereiche.0.module.0.id" 2>/dev/null || echo "")
+
+# Erstes Modul aus dem Baum holen — auch hier nicht naiv bereiche.0.module.0,
+# weil ein Bereich nur Kinder ohne eigene Module haben kann.
+MODUL_ID=$(curl -s "$API/studiengang/$STUDIENGANG_ID/moduldatenbank" | python3 -c "import json,sys
+def walk(node):
+  for m in node.get('module', []): yield m['id']
+  for k in node.get('kinder', []):
+    yield from walk(k)
+d = json.load(sys.stdin)
+for b in d['bereiche']:
+  for mid in walk(b):
+    print(mid); sys.exit(0)")
 echo "  → erstes Modul: $MODUL_ID"
+if [ -z "$MODUL_ID" ]; then
+  echo "  ${RED}FATAL: kein Modul im Studiengang-Baum.${RESET}"
+  exit 1
+fi
 
 api_test "GET /modul/:id" 200 GET "/modul/$MODUL_ID" "" ""
 api_test "GET /modul/INVALID-UUID = 400" 400 GET "/modul/INVALID" "" ""
