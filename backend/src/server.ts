@@ -6,6 +6,7 @@ import authPlugin from "./lib/auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { meRoutes } from "./routes/me.js";
+import { katalogRoutes } from "./routes/katalog.js";
 
 async function buildServer() {
   const app = Fastify({
@@ -25,6 +26,7 @@ async function buildServer() {
   await app.register(healthRoutes);
   await app.register(authRoutes);
   await app.register(meRoutes);
+  await app.register(katalogRoutes);
 
   return app;
 }
