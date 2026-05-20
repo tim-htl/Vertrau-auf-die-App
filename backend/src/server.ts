@@ -9,6 +9,9 @@ import { meRoutes } from "./routes/me.js";
 import { katalogRoutes } from "./routes/katalog.js";
 import { personenRoutes } from "./routes/personen.js";
 import { meKurseRoutes } from "./routes/me-kurse.js";
+import { chatRoutes } from "./routes/chats.js";
+import { aktivitaetRoutes } from "./routes/aktivitaeten.js";
+import { matchingRoutes } from "./routes/matching.js";
 
 async function buildServer() {
   const app = Fastify({
@@ -31,6 +34,9 @@ async function buildServer() {
   await app.register(katalogRoutes);
   await app.register(personenRoutes);
   await app.register(meKurseRoutes);
+  await app.register(chatRoutes);
+  await app.register(aktivitaetRoutes);
+  await app.register(matchingRoutes);
 
   return app;
 }

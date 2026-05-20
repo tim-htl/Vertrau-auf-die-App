@@ -16,7 +16,7 @@ const MAX_LIMIT = 100;
 // Welche Profile-Felder & Joins das Frontend braucht — bei Liste und Detail
 // gleich, damit der Swipe-Stack und die Detail-Anzeige aus demselben Shape
 // arbeiten können.
-const personProjection = {
+export const personProjection = {
   studiengang: {
     select: {
       id: true,
@@ -39,9 +39,9 @@ const personProjection = {
   },
 } satisfies Prisma.ProfileInclude;
 
-type PersonRow = Prisma.ProfileGetPayload<{ include: typeof personProjection }>;
+export type PersonRow = Prisma.ProfileGetPayload<{ include: typeof personProjection }>;
 
-function formatPerson(profile: PersonRow) {
+export function formatPerson(profile: PersonRow) {
   const { geburtsdatum, studiengang, belegteModule, ...rest } = profile;
   return {
     ...rest,
