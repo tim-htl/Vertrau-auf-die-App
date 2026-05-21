@@ -252,6 +252,18 @@ echo ""
 echo "${BOLD}== 10. Einladungen ==${RESET}"
 api_test "GET /me/einladungen (leer)"     200 GET  "/me/einladungen"     "" "$TOKEN"
 
+# ── 11. Storage Upload URLs (Phase 3) ────────────────────────────────────────
+
+echo ""
+echo "${BOLD}== 11. Storage Upload URLs ==${RESET}"
+api_test "POST /storage/upload-url avatars (eigenes Bild)" 200 POST "/storage/upload-url" '{"bucket":"avatars","extension":"jpg"}' "$TOKEN"
+api_test "POST /storage/upload-url aktivitaet-cover (als Admin)" 200 POST "/storage/upload-url" "{\"bucket\":\"aktivitaet-cover\",\"aktivitaetId\":\"$AKT_ID\",\"extension\":\"png\"}" "$TOKEN"
+api_test "POST /storage/upload-url chat-media (als Chat-Member)" 200 POST "/storage/upload-url" "{\"bucket\":\"chat-media\",\"chatId\":\"$CHAT_ID\",\"extension\":\"mp4\"}" "$TOKEN"
+api_test "POST /storage/upload-url ohne Auth = 401" 401 POST "/storage/upload-url" '{"bucket":"avatars"}' ""
+api_test "POST /storage/upload-url ungültiger Bucket = 400" 400 POST "/storage/upload-url" '{"bucket":"unbekannt"}' "$TOKEN"
+api_test "POST /storage/upload-url fehlende aktivitaetId = 400" 400 POST "/storage/upload-url" '{"bucket":"aktivitaet-cover"}' "$TOKEN"
+api_test "POST /storage/upload-url verbotene extension = 400" 400 POST "/storage/upload-url" '{"bucket":"avatars","extension":"exe"}' "$TOKEN"
+
 # ── Zusammenfassung ──────────────────────────────────────────────────────────
 
 echo ""
@@ -265,4 +277,4 @@ if [ $FAIL -gt 0 ]; then
   exit 1
 fi
 echo ""
-echo "${GREEN}${BOLD}Alle Tests grün. Phase 2 ist bereit zum Mergen.${RESET}"
+echo "${GREEN}${BOLD}Alle Tests grün. Phase ist bereit zum Mergen.${RESET}"
