@@ -168,6 +168,7 @@ function SwipeKarte({
   onOeffnen: () => void;
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
+  const schwelle = breite * 0.35;
 
   // PanResponder wird einmal erzeugt — onLike per Ref aktuell halten,
   // damit keine veraltete Closure feuert.
@@ -190,7 +191,7 @@ function SwipeKarte({
         translateX.setValue(g.dx > 0 ? g.dx : g.dx / 5);
       },
       onPanResponderRelease: (_e, g) => {
-        if (g.dx > breite * 0.35) {
+        if (g.dx > schwelle) {
           Animated.timing(translateX, {
             toValue: breite * 1.3,
             duration: 200,
@@ -208,26 +209,44 @@ function SwipeKarte({
     inputRange: [-breite, 0, breite],
     outputRange: ["-6deg", "0deg", "6deg"],
   });
-  const badgeOpacity = translateX.interpolate({
-    inputRange: [0, breite * 0.25],
+
+  // "Aufladung": 0 → 1, voll geladen an der Auslöse-Schwelle. Steuert
+  // Sichtbarkeit und Größe des Kreises in der links freiwerdenden Fläche.
+  const ladung = translateX.interpolate({
+    inputRange: [0, schwelle],
     outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
+  const ladeSkala = translateX.interpolate({
+    inputRange: [0, schwelle],
+    outputRange: [0.4, 1],
     extrapolate: "clamp",
   });
 
   return (
-    <Animated.View
-      {...panResponder.panHandlers}
-      style={{ transform: [{ translateX }, { rotate: rotation }] }}
-    >
-      <Pressable onPress={onOeffnen}>
-        <PersonenKarte person={person} breite={breite} hoehe={hoehe} />
-      </Pressable>
-
-      {/* Like-Badge, wird beim Ziehen sichtbar */}
-      <Animated.View style={[styles.likeBadge, { opacity: badgeOpacity }]} pointerEvents="none">
-        <Text style={styles.likeBadgeText}>FREUNDE?</Text>
+    <View style={{ width: breite, height: hoehe }}>
+      {/* Lade-Anzeige HINTER der Karte — wird sichtbar, wo die Karte
+          beim Ziehen nach rechts Fläche freigibt */}
+      <Animated.View
+        style={[styles.ladeFlaeche, { height: hoehe, opacity: ladung }]}
+        pointerEvents="none"
+      >
+        <Animated.View style={[styles.ladeKreis, { transform: [{ scale: ladeSkala }] }]}>
+          <Ionicons name="people" size={44} color="#34C759" />
+        </Animated.View>
       </Animated.View>
-    </Animated.View>
+
+      {/* Weißer Hintergrund auf der Karte, damit sie die Lade-Anzeige
+          verdeckt, solange sie nicht verschoben ist */}
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={{ backgroundColor: "#fff", transform: [{ translateX }, { rotate: rotation }] }}
+      >
+        <Pressable onPress={onOeffnen}>
+          <PersonenKarte person={person} breite={breite} hoehe={hoehe} />
+        </Pressable>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -369,24 +388,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
 
-  // Like-Badge auf der Swipe-Karte
-  likeBadge: {
+  // Lade-Anzeige hinter der Swipe-Karte (links freiwerdende Fläche)
+  ladeFlaeche: {
     position: "absolute",
-    top: 32,
-    left: 24,
-    borderWidth: 3,
-    borderColor: "#34C759",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    transform: [{ rotate: "-15deg" }],
-    backgroundColor: "rgba(255,255,255,0.85)",
+    left: 0,
+    top: 0,
+    width: "40%",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  likeBadgeText: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#34C759",
-    letterSpacing: 1,
+  ladeKreis: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: "#E8F8EE",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // Match-Banner
