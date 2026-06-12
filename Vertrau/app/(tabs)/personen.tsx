@@ -160,20 +160,27 @@ function SwipeKarte({
   hoehe,
   onLike,
   onOeffnen,
+  onPanAktiv,
 }: {
   person: Person;
   breite: number;
   hoehe: number;
   onLike: () => void;
   onOeffnen: () => void;
+  // Meldet, ob gerade horizontal gezogen wird — die FlatList schaltet
+  // dann ihr vertikales Scrollen ab, damit leichtes vertikales
+  // Verrutschen den Swipe nicht abbricht.
+  onPanAktiv?: (aktiv: boolean) => void;
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
   const schwelle = breite * 0.35;
 
-  // PanResponder wird einmal erzeugt — onLike per Ref aktuell halten,
+  // PanResponder wird einmal erzeugt — Callbacks per Ref aktuell halten,
   // damit keine veraltete Closure feuert.
   const onLikeRef = useRef(onLike);
   onLikeRef.current = onLike;
+  const onPanAktivRef = useRef(onPanAktiv);
+  onPanAktivRef.current = onPanAktiv;
 
   const zurueckFedern = () =>
     Animated.spring(translateX, {
@@ -185,12 +192,18 @@ function SwipeKarte({
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) =>
-        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderGrant: () => onPanAktivRef.current?.(true),
+      // Einmal beansprucht, wird die Geste NICHT mehr an die Liste
+      // abgegeben — sonst klaut deren Scroll den Swipe bei vertikalem
+      // Verrutschen.
+      onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_e, g) => {
         // nach links nur mit starkem Widerstand (kein Pass)
         translateX.setValue(g.dx > 0 ? g.dx : g.dx / 5);
       },
       onPanResponderRelease: (_e, g) => {
+        onPanAktivRef.current?.(false);
         if (g.dx > schwelle) {
           Animated.timing(translateX, {
             toValue: breite * 1.3,
@@ -201,7 +214,10 @@ function SwipeKarte({
           zurueckFedern();
         }
       },
-      onPanResponderTerminate: zurueckFedern,
+      onPanResponderTerminate: () => {
+        onPanAktivRef.current?.(false);
+        zurueckFedern();
+      },
     })
   ).current;
 
@@ -264,6 +280,10 @@ export default function PersonenScreen() {
 
   // Feed = Demo-Personen minus bereits gelikte (persistiert)
   const [feed, setFeed] = useState<Person[] | null>(null);
+
+  // false, solange eine Karte horizontal gezogen wird — verhindert,
+  // dass vertikales Verrutschen den Swipe abbricht
+  const [listeScrollbar, setListeScrollbar] = useState(true);
 
   // Match-Banner ("dezenter Hinweis" statt Vollbild-Overlay)
   const [matchInfo, setMatchInfo] = useState<{ name: string; chatId: string } | null>(null);
@@ -329,6 +349,7 @@ export default function PersonenScreen() {
         data={feed}
         keyExtractor={(item) => item.id}
         pagingEnabled
+        scrollEnabled={listeScrollbar}
         showsVerticalScrollIndicator={false}
         decelerationRate="fast"
         snapToInterval={karteHoehe}
@@ -340,6 +361,7 @@ export default function PersonenScreen() {
             hoehe={karteHoehe}
             onLike={() => personGeliked(item)}
             onOeffnen={() => router.push(`/person/${item.id}`)}
+            onPanAktiv={(aktiv) => setListeScrollbar(!aktiv)}
           />
         )}
         getItemLayout={(_, index) => ({
