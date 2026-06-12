@@ -25,7 +25,13 @@ import {
   PROFIL_FRAGEN,
   type FrageAntwort,
 } from "../../data/fragen";
+import { HOBBY_KATALOG, hobbyIcon } from "../../data/hobbies";
+import { alleModule, DEMO_STUDIENGANG } from "../../data/kurse";
 import { signOut } from "../../lib/supabase";
+
+// Modul-Namen aus der Moduldatenbank des Studiengangs (dedupliziert) —
+// Module werden daraus gewählt, nicht mehr frei eingetippt.
+const MODUL_KATALOG = [...new Set(alleModule(DEMO_STUDIENGANG.moduldatenbank).map((m) => m.name))];
 
 // ─── Typen & Standardwerte ────────────────────────────────────────────────────
 
@@ -137,7 +143,7 @@ function ProfilAnsicht({ profil }: { profil: ProfilData }) {
           <InfoZeile label="Uni" wert={profil.uni} />
           <InfoZeile label="Studiengang" wert={profil.studiengang} />
           <TagZeile label="Module" items={profil.module} />
-          <TagZeile label="Hobbies" items={profil.hobbies} />
+          <TagZeile label="Hobbies" items={profil.hobbies} mitIcons />
         </View>
       </View>
     </View>
@@ -153,7 +159,15 @@ function InfoZeile({ label, wert }: { label: string; wert: string }) {
   );
 }
 
-function TagZeile({ label, items }: { label: string; items: string[] }) {
+function TagZeile({
+  label,
+  items,
+  mitIcons = false,
+}: {
+  label: string;
+  items: string[];
+  mitIcons?: boolean;
+}) {
   return (
     <View style={stile.infoZeile}>
       <Text style={stile.infoLabel}>{label}</Text>
@@ -161,6 +175,9 @@ function TagZeile({ label, items }: { label: string; items: string[] }) {
         <View style={stile.tagReihe}>
           {items.map((item, i) => (
             <View key={i} style={stile.tag}>
+              {mitIcons && (
+                <Ionicons name={hobbyIcon(item)} size={12} color="#1a1a1a" style={{ marginRight: 4 }} />
+              )}
               <Text style={stile.tagText}>{item}</Text>
             </View>
           ))}
@@ -185,9 +202,11 @@ function ProfilBearbeiten({
   // nicht (Änderungen landen dort nur in einer Ref) — ohne eigenen State
   // würden Tag-/Bild-/Fragen-Änderungen erst nach dem Speichern sichtbar.
   const [profil, setProfil] = useState(startProfil);
-  const [neuesHobby, setNeuesHobby] = useState("");
-  const [neuesModul, setNeuesModul] = useState("");
   const [frageAuswahlOffen, setFrageAuswahlOffen] = useState(false);
+  const [hobbyAuswahlOffen, setHobbyAuswahlOffen] = useState(false);
+  const [hobbySuche, setHobbySuche] = useState("");
+  const [modulAuswahlOffen, setModulAuswahlOffen] = useState(false);
+  const [modulSuche, setModulSuche] = useState("");
 
   function onChange(neu: ProfilData) {
     setProfil(neu);
@@ -209,27 +228,33 @@ function ProfilBearbeiten({
     onChange({ ...profil, bilder: neueBilder });
   }
 
-  function hobbyHinzufuegen() {
-    const text = neuesHobby.trim();
-    if (!text) return;
-    onChange({ ...profil, hobbies: [...profil.hobbies, text] });
-    setNeuesHobby("");
+  function hobbyHinzufuegen(name: string) {
+    onChange({ ...profil, hobbies: [...profil.hobbies, name] });
   }
 
   function hobbyEntfernen(i: number) {
     onChange({ ...profil, hobbies: profil.hobbies.filter((_, idx) => idx !== i) });
   }
 
-  function modulHinzufuegen() {
-    const text = neuesModul.trim();
-    if (!text) return;
-    onChange({ ...profil, module: [...profil.module, text] });
-    setNeuesModul("");
+  function modulHinzufuegen(name: string) {
+    onChange({ ...profil, module: [...profil.module, name] });
   }
 
   function modulEntfernen(i: number) {
     onChange({ ...profil, module: profil.module.filter((_, idx) => idx !== i) });
   }
+
+  // Auswahl-Listen: noch nicht gewählte Einträge, optional per Suche gefiltert
+  const verfuegbareHobbies = HOBBY_KATALOG.filter(
+    (h) =>
+      !profil.hobbies.includes(h.name) &&
+      h.name.toLowerCase().includes(hobbySuche.trim().toLowerCase())
+  );
+  const verfuegbareModule = MODUL_KATALOG.filter(
+    (m) =>
+      !profil.module.includes(m) &&
+      m.toLowerCase().includes(modulSuche.trim().toLowerCase())
+  );
 
   function frageHinzufuegen(frageId: string) {
     if (profil.frageAntworten.length >= MAX_FRAGEN) return;
@@ -403,66 +428,122 @@ function ProfilBearbeiten({
             ))}
         </View>
 
-        {/* Hobbies */}
+        {/* Hobbies: Auswahl aus dem Katalog (mit Icons), kein Freitext */}
         <Text style={stile.editSektionTitel}>Hobbies</Text>
         <View style={stile.editSektion}>
-          <View style={stile.tagReiheEdit}>
-            {profil.hobbies.map((h, i) => (
-              <TouchableOpacity
-                key={i}
-                style={stile.tagEdit}
-                onPress={() => hobbyEntfernen(i)}
-              >
-                <Text style={stile.tagEditText}>{h}</Text>
-                <Ionicons name="close" size={12} color="#666" style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View style={stile.hinzufuegenZeile}>
-            <TextInput
-              style={stile.tagInput}
-              value={neuesHobby}
-              onChangeText={setNeuesHobby}
-              placeholder="Hobby hinzufügen…"
-              placeholderTextColor="#aaa"
-              onSubmitEditing={hobbyHinzufuegen}
-              returnKeyType="done"
+          {profil.hobbies.length > 0 && (
+            <View style={stile.tagReiheEdit}>
+              {profil.hobbies.map((h, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={stile.tagEdit}
+                  onPress={() => hobbyEntfernen(i)}
+                >
+                  <Ionicons name={hobbyIcon(h)} size={13} color="#1a1a1a" style={{ marginRight: 5 }} />
+                  <Text style={stile.tagEditText}>{h}</Text>
+                  <Ionicons name="close" size={12} color="#666" style={{ marginLeft: 4 }} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity
+            style={stile.frageHinzufuegenKnopf}
+            onPress={() => setHobbyAuswahlOffen((v) => !v)}
+          >
+            <Ionicons
+              name={hobbyAuswahlOffen ? "chevron-up" : "add"}
+              size={18}
+              color="#007AFF"
             />
-            <TouchableOpacity style={stile.hinzufuegenButton} onPress={hobbyHinzufuegen}>
-              <Ionicons name="add" size={20} color="#007AFF" />
-            </TouchableOpacity>
-          </View>
+            <Text style={stile.frageHinzufuegenText}>
+              {hobbyAuswahlOffen ? "Auswahl schließen" : "Hobby hinzufügen"}
+            </Text>
+          </TouchableOpacity>
+          {hobbyAuswahlOffen && (
+            <>
+              <TextInput
+                style={stile.sucheInput}
+                value={hobbySuche}
+                onChangeText={setHobbySuche}
+                placeholder="Suchen…"
+                placeholderTextColor="#aaa"
+                autoCorrect={false}
+              />
+              <View style={stile.tagReiheEdit}>
+                {verfuegbareHobbies.map((h) => (
+                  <TouchableOpacity
+                    key={h.name}
+                    style={stile.tagAuswahl}
+                    onPress={() => hobbyHinzufuegen(h.name)}
+                  >
+                    <Ionicons name={h.icon} size={13} color="#1a1a1a" style={{ marginRight: 5 }} />
+                    <Text style={stile.tagEditText}>{h.name}</Text>
+                  </TouchableOpacity>
+                ))}
+                {verfuegbareHobbies.length === 0 && (
+                  <Text style={stile.keineTreffer}>Keine Treffer.</Text>
+                )}
+              </View>
+            </>
+          )}
         </View>
 
-        {/* Module */}
+        {/* Module: Auswahl aus der Moduldatenbank des Studiengangs */}
         <Text style={stile.editSektionTitel}>Module</Text>
         <View style={stile.editSektion}>
-          <View style={stile.tagReiheEdit}>
-            {profil.module.map((m, i) => (
-              <TouchableOpacity
-                key={i}
-                style={stile.tagEdit}
-                onPress={() => modulEntfernen(i)}
-              >
-                <Text style={stile.tagEditText}>{m}</Text>
-                <Ionicons name="close" size={12} color="#666" style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View style={stile.hinzufuegenZeile}>
-            <TextInput
-              style={stile.tagInput}
-              value={neuesModul}
-              onChangeText={setNeuesModul}
-              placeholder="Modul hinzufügen…"
-              placeholderTextColor="#aaa"
-              onSubmitEditing={modulHinzufuegen}
-              returnKeyType="done"
+          {profil.module.length > 0 && (
+            <View style={stile.tagReiheEdit}>
+              {profil.module.map((m, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={stile.tagEdit}
+                  onPress={() => modulEntfernen(i)}
+                >
+                  <Text style={stile.tagEditText}>{m}</Text>
+                  <Ionicons name="close" size={12} color="#666" style={{ marginLeft: 4 }} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity
+            style={stile.frageHinzufuegenKnopf}
+            onPress={() => setModulAuswahlOffen((v) => !v)}
+          >
+            <Ionicons
+              name={modulAuswahlOffen ? "chevron-up" : "add"}
+              size={18}
+              color="#007AFF"
             />
-            <TouchableOpacity style={stile.hinzufuegenButton} onPress={modulHinzufuegen}>
-              <Ionicons name="add" size={20} color="#007AFF" />
-            </TouchableOpacity>
-          </View>
+            <Text style={stile.frageHinzufuegenText}>
+              {modulAuswahlOffen ? "Auswahl schließen" : "Modul hinzufügen"}
+            </Text>
+          </TouchableOpacity>
+          {modulAuswahlOffen && (
+            <>
+              <TextInput
+                style={stile.sucheInput}
+                value={modulSuche}
+                onChangeText={setModulSuche}
+                placeholder="Moduldatenbank durchsuchen…"
+                placeholderTextColor="#aaa"
+                autoCorrect={false}
+              />
+              <View style={stile.tagReiheEdit}>
+                {verfuegbareModule.map((m) => (
+                  <TouchableOpacity
+                    key={m}
+                    style={stile.tagAuswahl}
+                    onPress={() => modulHinzufuegen(m)}
+                  >
+                    <Text style={stile.tagEditText}>{m}</Text>
+                  </TouchableOpacity>
+                ))}
+                {verfuegbareModule.length === 0 && (
+                  <Text style={stile.keineTreffer}>Keine Treffer.</Text>
+                )}
+              </View>
+            </>
+          )}
         </View>
 
         {/* Nicht bearbeitbare Felder (Info) */}
@@ -496,6 +577,10 @@ export default function ProfilScreen() {
   const [profil, setProfil] = useState<ProfilData>(DEFAULT_PROFIL);
   const [editModus, setEditModus] = useState(false);
   const [seite, setSeite] = useState(0);
+  // false, solange der Finger auf dem Bilder-Carousel der AP liegt —
+  // sonst frisst der Pager dessen horizontale Swipes (Gesten-Konflikt
+  // zweier verschachtelter horizontaler ScrollViews).
+  const [pagerAktiv, setPagerAktiv] = useState(true);
   const editProfilRef = useRef<ProfilData>(profil);
 
   // Profil laden. Ältere gespeicherte Profile haben nur 5 Bild-Slots und
@@ -593,6 +678,7 @@ export default function ProfilScreen() {
       <ScrollView
         horizontal
         pagingEnabled
+        scrollEnabled={pagerAktiv}
         showsHorizontalScrollIndicator={false}
         onScroll={(e) => {
           const i = Math.round(e.nativeEvent.contentOffset.x / width);
@@ -617,6 +703,7 @@ export default function ProfilScreen() {
               frageAntworten: profil.frageAntworten,
             }}
             breite={width}
+            onCarouselTouch={(aktiv) => setPagerAktiv(!aktiv)}
           />
         </View>
       </ScrollView>
@@ -693,6 +780,8 @@ const stile = StyleSheet.create({
     gap: 5,
   },
   tag: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#F2F2F7",
     borderRadius: 14,
     paddingHorizontal: 10,
@@ -837,6 +926,32 @@ const stile = StyleSheet.create({
     fontSize: 14,
     color: "#1a1a1a",
     lineHeight: 19,
+  },
+
+  // Katalog-Auswahl (Hobbies/Module)
+  sucheInput: {
+    backgroundColor: "#F2F2F7",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 15,
+    color: "#1a1a1a",
+    marginBottom: 10,
+  },
+  tagAuswahl: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#d1d1d6",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  keineTreffer: {
+    fontSize: 13,
+    color: "#8E8E93",
+    paddingVertical: 4,
   },
 
   // KP↔AP-Pager
