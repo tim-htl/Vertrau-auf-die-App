@@ -81,6 +81,7 @@ model Profile {
   studiengang   Studiengang? @relation(fields: [studiengangId], references: [id], onDelete: SetNull)
 
   belegteModule UserModul[]
+  frageAntworten ProfilFrageAntwort[]
 
   aktivitaetenAlsAdmin    Aktivitaet[]          @relation("AktivitaetAdmin")
   aktivitaetenTeilnahmen  AktivitaetTeilnehmer[]
@@ -289,6 +290,46 @@ model UserModul {
 
   @@id([profileId, modulId])
   @@map("user_module")
+}
+
+// Katalog "witziger" Profil-Fragen. User wählen daraus bis zu 5 aus und
+// beantworten sie auf ihrem Profil (-> profil_frage_antworten). Katalog wird
+// von uns gepflegt; Entfernen einer Frage läuft über aktiv=false
+// (Soft-Delete wie locations), damit bestehende Antworten erhalten bleiben.
+model ProfilFrage {
+  id   String @id @default(uuid()) @db.Uuid
+  text String @unique
+
+  aktiv      Boolean @default(true)
+  sortierung Int     @default(0)
+
+  antworten ProfilFrageAntwort[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("profil_fragen")
+}
+
+// Antwort eines Users auf eine Profil-Frage. Teil des öffentlichen
+// Profilinhalts (wie belegte Module). Max. 5 pro Profil und max. 200
+// Zeichen Antwortlänge werden im Endpoint erzwungen, nicht in der DB.
+// position = Anzeige-Reihenfolge auf dem Profil.
+model ProfilFrageAntwort {
+  profileId String @db.Uuid
+  frageId   String @db.Uuid
+
+  antwort  String
+  position Int
+
+  profile Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  frage   ProfilFrage @relation(fields: [frageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([profileId, frageId])
+  @@map("profil_frage_antworten")
 }
 
 // ── Chat-System ──────────────────────────────────────────────────────────────

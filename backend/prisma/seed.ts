@@ -183,9 +183,41 @@ async function main() {
     },
   });
 
+  // ── Profil-Fragen-Katalog ──────────────────────────────────────────────────
+  // Finale Liste vom 2026-06-12. sortierung in 10er-Schritten, damit später
+  // Fragen dazwischengeschoben werden können, ohne alles umzunummerieren.
+  const profilFragen = [
+    "2 Lügen, eine Wahrheit",
+    "Was ist dein Lieblingslied?",
+    "Wenn du eine berühmte Persönlichkeit (tot oder lebendig) treffen könntest, wer wäre das und warum?",
+    "Wenn du in einem fiktiven Universum leben müsstest, welches wäre das?",
+    "Was ist deine Lieblings-Kombination beim Essen, die andere Leute super seltsam finden?",
+    "Wenn du jetzt sofort an einen beliebigen Ort auf der Welt reisen könntest, wo würdest du landen und warum?",
+    "Welche Superkraft hättest du gern?",
+    "Wenn du eine Zeitreisemaschine hättest, zu welchem Punkt würdest du reisen?",
+    "Was ist dein nutzlosestes Talent?",
+    "Was ist deine unpopulärste Meinung?",
+    "Was ist dein liebster unnützer Fakt?",
+    "Was ist das Spontanste, das du je gemacht hast?",
+    "Was steht ganz oben auf deiner Bucket List?",
+    "Was war dein Kindheits-Berufswunsch?",
+    "Wofür könntest du spontan einen einstündigen Vortrag halten — ohne jede Vorbereitung?",
+    "Prokrastination deluxe: Was tust du, wenn du eigentlich lernen solltest?",
+  ];
+
+  for (const [i, text] of profilFragen.entries()) {
+    const sortierung = (i + 1) * 10;
+    await prisma.profilFrage.upsert({
+      where: { text },
+      update: { sortierung },
+      create: { text, sortierung },
+    });
+  }
+
   console.log(`Seed done.`);
   console.log(`  Universitäten: 2 (${tuBerlin.kuerzel}, ${lmu.kuerzel})`);
   console.log(`  Studiengänge:  2 (Wirtschaftsing. B.Sc. + M.Sc. @ TUB)`);
+  console.log(`  Profil-Fragen: ${profilFragen.length}`);
 }
 
 main()
