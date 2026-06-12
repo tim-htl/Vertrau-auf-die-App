@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { frageText, type FrageAntwort } from "../data/fragen";
+import { hobbyIcon } from "../data/hobbies";
 
 // ─── Ausführliche Profilansicht (AP) ──────────────────────────────────────────
 //
@@ -37,16 +38,33 @@ export type ApProfil = {
 
 // ─── Bilder-Carousel (Muster aus aktivitaet/[id]) ─────────────────────────────
 
-function BilderCarousel({ bilder, breite }: { bilder: string[]; breite: number }) {
+function BilderCarousel({
+  bilder,
+  breite,
+  onTouchAktiv,
+}: {
+  bilder: string[];
+  breite: number;
+  // Meldet, ob der Finger gerade auf dem Carousel liegt. Der KP↔AP-Pager
+  // im Profil-Tab schaltet sich dann ab, damit horizontale Swipes hier
+  // das Bild wechseln statt der Pager-Seite (Gesten-Konflikt).
+  onTouchAktiv?: (aktiv: boolean) => void;
+}) {
   const bildHoehe = Math.round(breite * 1.1);
   const [index, setIndex] = useState(0);
+  // Bilder mit toten URIs (z. B. alte file://-Pfade aus dem Geräte-Cache)
+  // laden nicht — die fliegen via onError raus statt als leere Seite
+  // im Carousel zu hängen.
+  const [kaputt, setKaputt] = useState<string[]>([]);
+
+  const ladbareBilder = bilder.filter((b) => !kaputt.includes(b));
 
   function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
     const neuerIndex = Math.round(e.nativeEvent.contentOffset.x / breite);
     if (neuerIndex !== index) setIndex(neuerIndex);
   }
 
-  if (bilder.length === 0) {
+  if (ladbareBilder.length === 0) {
     return (
       <View style={[stile.bildPlatzhalter, { width: breite, height: bildHoehe }]}>
         <Ionicons name="person" size={breite * 0.5} color="#fff" style={{ marginTop: breite * 0.08 }} />
@@ -59,22 +77,28 @@ function BilderCarousel({ bilder, breite }: { bilder: string[]; breite: number }
       <ScrollView
         horizontal
         pagingEnabled
+        nestedScrollEnabled
         showsHorizontalScrollIndicator={false}
         onScroll={onScroll}
         scrollEventThrottle={16}
+        onTouchStart={() => onTouchAktiv?.(true)}
+        onTouchEnd={() => onTouchAktiv?.(false)}
+        onTouchCancel={() => onTouchAktiv?.(false)}
+        onScrollEndDrag={() => onTouchAktiv?.(false)}
       >
-        {bilder.map((uri, i) => (
+        {ladbareBilder.map((uri) => (
           <Image
-            key={i}
+            key={uri}
             source={{ uri }}
             style={{ width: breite, height: bildHoehe }}
             resizeMode="cover"
+            onError={() => setKaputt((k) => (k.includes(uri) ? k : [...k, uri]))}
           />
         ))}
       </ScrollView>
-      {bilder.length > 1 && (
+      {ladbareBilder.length > 1 && (
         <View style={stile.dotsReihe}>
-          {bilder.map((_, i) => (
+          {ladbareBilder.map((_, i) => (
             <View key={i} style={[stile.dot, i === index && stile.dotAktiv]} />
           ))}
         </View>
@@ -103,7 +127,16 @@ function InfoBlock({ label, wert }: { label: string; wert: string }) {
   );
 }
 
-function TagBlock({ label, items }: { label: string; items: string[] }) {
+function TagBlock({
+  label,
+  items,
+  mitIcons = false,
+}: {
+  label: string;
+  items: string[];
+  // true bei Hobbies: zeigt das Katalog-Icon vor dem Namen
+  mitIcons?: boolean;
+}) {
   return (
     <View style={stile.infoBlock}>
       <Text style={stile.infoLabel}>{label}</Text>
@@ -111,6 +144,9 @@ function TagBlock({ label, items }: { label: string; items: string[] }) {
         <View style={stile.tagReihe}>
           {items.map((item, i) => (
             <View key={i} style={stile.tag}>
+              {mitIcons && (
+                <Ionicons name={hobbyIcon(item)} size={13} color="#1a1a1a" style={{ marginRight: 5 }} />
+              )}
               <Text style={stile.tagText}>{item}</Text>
             </View>
           ))}
@@ -127,11 +163,14 @@ function TagBlock({ label, items }: { label: string; items: string[] }) {
 export function ProfilAusfuehrlich({
   profil,
   breite,
+  onCarouselTouch,
 }: {
   profil: ApProfil;
   // Breite explizit, damit die AP auch als Pager-Seite (Profil-Tab)
   // korrekt layoutet — useWindowDimensions als Fallback.
   breite?: number;
+  // Durchgereicht ans Carousel — siehe BilderCarousel.onTouchAktiv.
+  onCarouselTouch?: (aktiv: boolean) => void;
 }) {
   const { width } = useWindowDimensions();
   const apBreite = breite ?? width;
@@ -144,7 +183,11 @@ export function ProfilAusfuehrlich({
       contentContainerStyle={{ paddingBottom: 32 }}
       showsVerticalScrollIndicator={false}
     >
-      <BilderCarousel bilder={gefuellteBilder} breite={apBreite} />
+      <BilderCarousel
+        bilder={gefuellteBilder}
+        breite={apBreite}
+        onTouchAktiv={onCarouselTouch}
+      />
 
       {/* Kopf: Name + Alter */}
       <View style={stile.kopf}>
@@ -167,7 +210,7 @@ export function ProfilAusfuehrlich({
         <InfoBlock label="Uni" wert={profil.uni} />
         <InfoBlock label="Studiengang" wert={profil.studiengang} />
         <TagBlock label="Module" items={profil.module} />
-        <TagBlock label="Hobbies" items={profil.hobbies} />
+        <TagBlock label="Hobbies" items={profil.hobbies} mitIcons />
       </View>
     </ScrollView>
   );
@@ -267,6 +310,8 @@ const stile = StyleSheet.create({
     gap: 6,
   },
   tag: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#F2F2F7",
     borderRadius: 14,
     paddingHorizontal: 10,

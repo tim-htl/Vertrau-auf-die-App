@@ -59,6 +59,19 @@ export function findeBereich(
   return { bereich: aktuell, pfadNamen };
 }
 
+// ─── Helfer: alle Module des Baums als flache Liste ───────────────────────────
+// Für Auswahl-UIs (z. B. Module im Profil), wo die Bereichs-Hierarchie
+// egal ist und nur die Modul-Namen gebraucht werden.
+
+export function alleModule(bereiche: Bereich[]): Modul[] {
+  const ergebnis: Modul[] = [];
+  for (const bereich of bereiche) {
+    if (bereich.module) ergebnis.push(...bereich.module);
+    if (bereich.bereiche) ergebnis.push(...alleModule(bereich.bereiche));
+  }
+  return ergebnis;
+}
+
 // ─── Helfer: Modul anhand seiner ID im gesamten Baum finden ─────────────────
 
 export function findeModul(bereiche: Bereich[], modulId: string): Modul | null {

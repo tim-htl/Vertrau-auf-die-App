@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { hobbyIcon } from "../../data/hobbies";
 import { DEMO_PERSONEN, type Person } from "../../data/personen";
 
 // ─── Bild-Platzhalter ─────────────────────────────────────────────────────────
@@ -35,13 +36,24 @@ function InfoZeile({ label, wert }: { label: string; wert: string }) {
 
 // ─── Tag-Reihe ────────────────────────────────────────────────────────────────
 
-function TagReihe({ label, items }: { label: string; items: string[] }) {
+function TagReihe({
+  label,
+  items,
+  mitIcons = false,
+}: {
+  label: string;
+  items: string[];
+  mitIcons?: boolean;
+}) {
   return (
     <View style={styles.infoZeile}>
       <Text style={styles.infoLabel}>{label}</Text>
       <View style={styles.tagReihe}>
         {items.map((item, i) => (
           <View key={i} style={styles.tag}>
+            {mitIcons && (
+              <Ionicons name={hobbyIcon(item)} size={12} color="#1a1a1a" style={{ marginRight: 4 }} />
+            )}
             <Text style={styles.tagText}>{item}</Text>
           </View>
         ))}
@@ -122,7 +134,7 @@ export function PersonenKarte({
           <InfoZeile label="Uni" wert={person.uni} />
           <InfoZeile label="Studiengang" wert={person.studiengang} />
           <TagReihe label="Module" items={person.module} />
-          <TagReihe label="Hobbies" items={person.hobbies} />
+          <TagReihe label="Hobbies" items={person.hobbies} mitIcons />
         </View>
       </View>
     </View>
@@ -248,6 +260,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   tag: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#F2F2F7",
     borderRadius: 14,
     paddingHorizontal: 10,
