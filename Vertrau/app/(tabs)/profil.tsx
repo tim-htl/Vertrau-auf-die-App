@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { signOut } from "../../lib/supabase";
 
 // ─── Typen & Standardwerte ────────────────────────────────────────────────────
 
@@ -357,9 +358,32 @@ export default function ProfilScreen() {
     });
   }, []);
 
+  function abmelden() {
+    Alert.alert("Abmelden", "Möchtest du dich wirklich abmelden?", [
+      { text: "Abbrechen", style: "cancel" },
+      {
+        text: "Abmelden",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await signOut();
+            // Session weg → AuthGate im RootLayout wechselt zum Login-Screen.
+          } catch (e) {
+            Alert.alert("Fehler", e instanceof Error ? e.message : "Abmelden fehlgeschlagen.");
+          }
+        },
+      },
+    ]);
+  }
+
   // Header-Button dynamisch setzen
   useLayoutEffect(() => {
     navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={abmelden} style={{ marginLeft: 4 }}>
+          <Ionicons name="log-out-outline" size={22} color="#FF3B30" />
+        </TouchableOpacity>
+      ),
       headerRight: () => (
         <TouchableOpacity
           onPress={async () => {
