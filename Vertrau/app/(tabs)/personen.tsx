@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import {
   FlatList,
   Image,
+  Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -130,6 +132,7 @@ export function PersonenKarte({
 // ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
 export default function PersonenScreen() {
+  const router = useRouter();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const TAB_BAR = 49;
@@ -149,7 +152,12 @@ export default function PersonenScreen() {
         snapToInterval={karteHoehe}
         snapToAlignment="start"
         renderItem={({ item }) => (
-          <PersonenKarte person={item} breite={width} hoehe={karteHoehe} />
+          // Tap auf die Karte öffnet die ausführliche Profilansicht.
+          // Vertikales Swipen (Profil-Wechsel) bleibt unberührt — der
+          // Scroll-Gestus bricht den Press automatisch ab.
+          <Pressable onPress={() => router.push(`/person/${item.id}`)}>
+            <PersonenKarte person={item} breite={width} hoehe={karteHoehe} />
+          </Pressable>
         )}
         getItemLayout={(_, index) => ({
           length: karteHoehe,
