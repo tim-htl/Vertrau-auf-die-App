@@ -1,14 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
+  Animated,
   FlatList,
   Image,
+  PanResponder,
+  Pressable,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { hobbyIcon } from "../../data/hobbies";
 import { DEMO_PERSONEN, type Person } from "../../data/personen";
+import { ladeGelikte, likePerson, resetSwipes } from "../../data/swipes";
 
 // ─── Bild-Platzhalter ─────────────────────────────────────────────────────────
 
@@ -33,13 +41,24 @@ function InfoZeile({ label, wert }: { label: string; wert: string }) {
 
 // ─── Tag-Reihe ────────────────────────────────────────────────────────────────
 
-function TagReihe({ label, items }: { label: string; items: string[] }) {
+function TagReihe({
+  label,
+  items,
+  mitIcons = false,
+}: {
+  label: string;
+  items: string[];
+  mitIcons?: boolean;
+}) {
   return (
     <View style={styles.infoZeile}>
       <Text style={styles.infoLabel}>{label}</Text>
       <View style={styles.tagReihe}>
         {items.map((item, i) => (
           <View key={i} style={styles.tag}>
+            {mitIcons && (
+              <Ionicons name={hobbyIcon(item)} size={12} color="#1a1a1a" style={{ marginRight: 4 }} />
+            )}
             <Text style={styles.tagText}>{item}</Text>
           </View>
         ))}
@@ -120,9 +139,129 @@ export function PersonenKarte({
           <InfoZeile label="Uni" wert={person.uni} />
           <InfoZeile label="Studiengang" wert={person.studiengang} />
           <TagReihe label="Module" items={person.module} />
-          <TagReihe label="Hobbies" items={person.hobbies} />
+          <TagReihe label="Hobbies" items={person.hobbies} mitIcons />
         </View>
       </View>
+    </View>
+  );
+}
+
+// ─── Swipe-Karte (Tinder-Mechanik, nur Rechts-Swipe = Like) ───────────────────
+//
+// Die Karte folgt dem Finger nach rechts (leichte Rotation + "FREUNDE?"-
+// Badge), ab der Schwelle fliegt sie raus und löst das Like aus. Links
+// gibt es nur Widerstand (kein Pass — bewusste Entscheidung). Vertikales
+// Blättern der FlatList bleibt unberührt: der PanResponder greift nur,
+// wenn die Bewegung klar horizontal ist.
+
+function SwipeKarte({
+  person,
+  breite,
+  hoehe,
+  onLike,
+  onOeffnen,
+  onPanAktiv,
+}: {
+  person: Person;
+  breite: number;
+  hoehe: number;
+  onLike: () => void;
+  onOeffnen: () => void;
+  // Meldet, ob gerade horizontal gezogen wird — die FlatList schaltet
+  // dann ihr vertikales Scrollen ab, damit leichtes vertikales
+  // Verrutschen den Swipe nicht abbricht.
+  onPanAktiv?: (aktiv: boolean) => void;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const schwelle = breite * 0.35;
+
+  // PanResponder wird einmal erzeugt — Callbacks per Ref aktuell halten,
+  // damit keine veraltete Closure feuert.
+  const onLikeRef = useRef(onLike);
+  onLikeRef.current = onLike;
+  const onPanAktivRef = useRef(onPanAktiv);
+  onPanAktivRef.current = onPanAktiv;
+
+  const zurueckFedern = () =>
+    Animated.spring(translateX, {
+      toValue: 0,
+      friction: 6,
+      useNativeDriver: true,
+    }).start();
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderGrant: () => onPanAktivRef.current?.(true),
+      // Einmal beansprucht, wird die Geste NICHT mehr an die Liste
+      // abgegeben — sonst klaut deren Scroll den Swipe bei vertikalem
+      // Verrutschen.
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderMove: (_e, g) => {
+        // nach links nur mit starkem Widerstand (kein Pass)
+        translateX.setValue(g.dx > 0 ? g.dx : g.dx / 5);
+      },
+      onPanResponderRelease: (_e, g) => {
+        onPanAktivRef.current?.(false);
+        if (g.dx > schwelle) {
+          Animated.timing(translateX, {
+            toValue: breite * 1.3,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => onLikeRef.current());
+        } else {
+          zurueckFedern();
+        }
+      },
+      onPanResponderTerminate: () => {
+        onPanAktivRef.current?.(false);
+        zurueckFedern();
+      },
+    })
+  ).current;
+
+  const rotation = translateX.interpolate({
+    inputRange: [-breite, 0, breite],
+    outputRange: ["-6deg", "0deg", "6deg"],
+  });
+
+  // "Aufladung": 0 → 1, voll geladen an der Auslöse-Schwelle. Steuert
+  // Sichtbarkeit und Größe des Kreises in der links freiwerdenden Fläche.
+  const ladung = translateX.interpolate({
+    inputRange: [0, schwelle],
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
+  const ladeSkala = translateX.interpolate({
+    inputRange: [0, schwelle],
+    outputRange: [0.4, 1],
+    extrapolate: "clamp",
+  });
+
+  return (
+    <View style={{ width: breite, height: hoehe }}>
+      {/* Lade-Anzeige HINTER der Karte — wird sichtbar, wo die Karte
+          beim Ziehen nach rechts Fläche freigibt */}
+      <Animated.View
+        style={[styles.ladeFlaeche, { height: hoehe, opacity: ladung }]}
+        pointerEvents="none"
+      >
+        <Animated.View style={[styles.ladeKreis, { transform: [{ scale: ladeSkala }] }]}>
+          <Ionicons name="people" size={44} color="#34C759" />
+        </Animated.View>
+      </Animated.View>
+
+      {/* Weißer Hintergrund auf der Karte, damit sie die Lade-Anzeige
+          verdeckt, solange sie nicht verschoben ist */}
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={{ backgroundColor: "#fff", transform: [{ translateX }, { rotate: rotation }] }}
+      >
+        <Pressable onPress={onOeffnen}>
+          <PersonenKarte person={person} breite={breite} hoehe={hoehe} />
+        </Pressable>
+      </Animated.View>
     </View>
   );
 }
@@ -130,6 +269,7 @@ export function PersonenKarte({
 // ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
 export default function PersonenScreen() {
+  const router = useRouter();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const TAB_BAR = 49;
@@ -138,18 +278,91 @@ export default function PersonenScreen() {
   // verschiebt sich der Abstand beim Swipen zwischen Profilen).
   const karteHoehe = height - insets.top - TAB_BAR - insets.bottom;
 
+  // Feed = Demo-Personen minus bereits gelikte (persistiert)
+  const [feed, setFeed] = useState<Person[] | null>(null);
+
+  // false, solange eine Karte horizontal gezogen wird — verhindert,
+  // dass vertikales Verrutschen den Swipe abbricht
+  const [listeScrollbar, setListeScrollbar] = useState(true);
+
+  // Match-Banner ("dezenter Hinweis" statt Vollbild-Overlay)
+  const [matchInfo, setMatchInfo] = useState<{ name: string; chatId: string } | null>(null);
+  const bannerY = useRef(new Animated.Value(-120)).current;
+  const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    ladeGelikte().then((gelikte) =>
+      setFeed(DEMO_PERSONEN.filter((p) => !gelikte.includes(p.id)))
+    );
+    return () => {
+      if (bannerTimer.current) clearTimeout(bannerTimer.current);
+    };
+  }, []);
+
+  function zeigeMatchBanner(name: string, chatId: string) {
+    setMatchInfo({ name, chatId });
+    Animated.spring(bannerY, { toValue: 0, friction: 7, useNativeDriver: true }).start();
+    if (bannerTimer.current) clearTimeout(bannerTimer.current);
+    bannerTimer.current = setTimeout(verbergeMatchBanner, 4000);
+  }
+
+  function verbergeMatchBanner() {
+    Animated.timing(bannerY, { toValue: -120, duration: 250, useNativeDriver: true }).start(
+      () => setMatchInfo(null)
+    );
+  }
+
+  async function personGeliked(person: Person) {
+    // Karte sofort aus dem Feed nehmen, dann Like verarbeiten
+    setFeed((f) => (f ? f.filter((p) => p.id !== person.id) : f));
+    const ergebnis = await likePerson(person);
+    if (ergebnis.match && ergebnis.chatId) {
+      zeigeMatchBanner(person.name, ergebnis.chatId);
+    }
+  }
+
+  async function demoZuruecksetzen() {
+    await resetSwipes();
+    setFeed(DEMO_PERSONEN);
+  }
+
+  if (feed === null) {
+    return <View style={styles.hintergrund} />;
+  }
+
+  if (feed.length === 0) {
+    return (
+      <View style={[styles.hintergrund, styles.leerContainer, { paddingTop: insets.top }]}>
+        <Ionicons name="people-outline" size={48} color="#C7C7CC" />
+        <Text style={styles.leerTitel}>Keine weiteren Profile</Text>
+        <Text style={styles.leerText}>Du hast alle Profile durchgeswiped.</Text>
+        <TouchableOpacity style={styles.resetKnopf} onPress={demoZuruecksetzen}>
+          <Text style={styles.resetKnopfText}>Demo zurücksetzen</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.hintergrund, { paddingTop: insets.top }]}>
       <FlatList
-        data={DEMO_PERSONEN}
+        data={feed}
         keyExtractor={(item) => item.id}
         pagingEnabled
+        scrollEnabled={listeScrollbar}
         showsVerticalScrollIndicator={false}
         decelerationRate="fast"
         snapToInterval={karteHoehe}
         snapToAlignment="start"
         renderItem={({ item }) => (
-          <PersonenKarte person={item} breite={width} hoehe={karteHoehe} />
+          <SwipeKarte
+            person={item}
+            breite={width}
+            hoehe={karteHoehe}
+            onLike={() => personGeliked(item)}
+            onOeffnen={() => router.push(`/person/${item.id}`)}
+            onPanAktiv={(aktiv) => setListeScrollbar(!aktiv)}
+          />
         )}
         getItemLayout={(_, index) => ({
           length: karteHoehe,
@@ -157,6 +370,34 @@ export default function PersonenScreen() {
           index,
         })}
       />
+
+      {/* Match-Banner */}
+      {matchInfo && (
+        <Animated.View
+          style={[
+            styles.matchBanner,
+            { top: insets.top + 8, transform: [{ translateY: bannerY }] },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.matchBannerInhalt}
+            activeOpacity={0.85}
+            onPress={() => {
+              const chatId = matchInfo.chatId;
+              verbergeMatchBanner();
+              router.push(`/chat/${chatId}`);
+            }}
+          >
+            <Ionicons name="people" size={22} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.matchBannerTitel}>Ihr seid jetzt Freunde! 🎉</Text>
+              <Text style={styles.matchBannerText}>
+                {matchInfo.name} hat dich auch geliked — tippe, um zu chatten.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -167,6 +408,86 @@ const styles = StyleSheet.create({
   hintergrund: {
     flex: 1,
     backgroundColor: "#fff",
+  },
+
+  // Lade-Anzeige hinter der Swipe-Karte (links freiwerdende Fläche)
+  ladeFlaeche: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    width: "40%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ladeKreis: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: "#E8F8EE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Match-Banner
+  matchBanner: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+  },
+  matchBannerInhalt: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#34C759",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  matchBannerTitel: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  matchBannerText: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 13,
+    marginTop: 1,
+  },
+
+  // Leerer Feed
+  leerContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 32,
+  },
+  leerTitel: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1a1a1a",
+    marginTop: 8,
+  },
+  leerText: {
+    fontSize: 14,
+    color: "#8E8E93",
+    textAlign: "center",
+  },
+  resetKnopf: {
+    marginTop: 16,
+    backgroundColor: "#F2F2F7",
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  resetKnopfText: {
+    color: "#007AFF",
+    fontSize: 15,
+    fontWeight: "600",
   },
 
   karte: {
@@ -240,6 +561,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   tag: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#F2F2F7",
     borderRadius: 14,
     paddingHorizontal: 10,

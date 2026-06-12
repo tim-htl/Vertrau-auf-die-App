@@ -17,8 +17,28 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ProfilAusfuehrlich } from "../../components/ProfilAusfuehrlich";
+import {
+  frageText,
+  MAX_ANTWORT_LAENGE,
+  MAX_FRAGEN,
+  PROFIL_FRAGEN,
+  type FrageAntwort,
+} from "../../data/fragen";
+import { HOBBY_KATALOG, hobbyIcon } from "../../data/hobbies";
+import { alleModule, DEMO_STUDIENGANG } from "../../data/kurse";
+
+// Modul-Namen aus der Moduldatenbank des Studiengangs (dedupliziert) —
+// Module werden daraus gewählt, nicht mehr frei eingetippt.
+const MODUL_KATALOG = [...new Set(alleModule(DEMO_STUDIENGANG.moduldatenbank).map((m) => m.name))];
 
 // ─── Typen & Standardwerte ────────────────────────────────────────────────────
+
+// 10 Bild-Slots: die ersten 5 erscheinen auch auf der Profilkarte (KP),
+// alle 10 in der ausführlichen Ansicht (AP) — ein gemeinsames Array,
+// keine getrennten Listen.
+const MAX_BILDER = 10;
+const KP_BILDER = 5;
 
 type ProfilData = {
   // Nicht bearbeitbar
@@ -31,6 +51,7 @@ type ProfilData = {
   bio: string;
   hobbies: string[];
   module: string[];
+  frageAntworten: FrageAntwort[];
 };
 
 const DEFAULT_PROFIL: ProfilData = {
@@ -38,10 +59,11 @@ const DEFAULT_PROFIL: ProfilData = {
   alter: "22",
   studiengang: "Studiengang",
   uni: "Universität",
-  bilder: [null, null, null, null, null],
+  bilder: Array(MAX_BILDER).fill(null),
   bio: "",
   hobbies: [],
   module: [],
+  frageAntworten: [],
 };
 
 const STORAGE_KEY = "profil_v2";
@@ -120,7 +142,7 @@ function ProfilAnsicht({ profil }: { profil: ProfilData }) {
           <InfoZeile label="Uni" wert={profil.uni} />
           <InfoZeile label="Studiengang" wert={profil.studiengang} />
           <TagZeile label="Module" items={profil.module} />
-          <TagZeile label="Hobbies" items={profil.hobbies} />
+          <TagZeile label="Hobbies" items={profil.hobbies} mitIcons />
         </View>
       </View>
     </View>
@@ -136,7 +158,15 @@ function InfoZeile({ label, wert }: { label: string; wert: string }) {
   );
 }
 
-function TagZeile({ label, items }: { label: string; items: string[] }) {
+function TagZeile({
+  label,
+  items,
+  mitIcons = false,
+}: {
+  label: string;
+  items: string[];
+  mitIcons?: boolean;
+}) {
   return (
     <View style={stile.infoZeile}>
       <Text style={stile.infoLabel}>{label}</Text>
@@ -144,6 +174,9 @@ function TagZeile({ label, items }: { label: string; items: string[] }) {
         <View style={stile.tagReihe}>
           {items.map((item, i) => (
             <View key={i} style={stile.tag}>
+              {mitIcons && (
+                <Ionicons name={hobbyIcon(item)} size={12} color="#1a1a1a" style={{ marginRight: 4 }} />
+              )}
               <Text style={stile.tagText}>{item}</Text>
             </View>
           ))}
@@ -158,14 +191,26 @@ function TagZeile({ label, items }: { label: string; items: string[] }) {
 // ─── Bearbeitungs-Modus ───────────────────────────────────────────────────────
 
 function ProfilBearbeiten({
-  profil,
-  onChange,
+  profil: startProfil,
+  onChange: onAenderung,
 }: {
   profil: ProfilData;
   onChange: (p: ProfilData) => void;
 }) {
-  const [neuesHobby, setNeuesHobby] = useState("");
-  const [neuesModul, setNeuesModul] = useState("");
+  // Entwurf als lokaler State: der Parent re-rendert während des Bearbeitens
+  // nicht (Änderungen landen dort nur in einer Ref) — ohne eigenen State
+  // würden Tag-/Bild-/Fragen-Änderungen erst nach dem Speichern sichtbar.
+  const [profil, setProfil] = useState(startProfil);
+  const [frageAuswahlOffen, setFrageAuswahlOffen] = useState(false);
+  const [hobbyAuswahlOffen, setHobbyAuswahlOffen] = useState(false);
+  const [hobbySuche, setHobbySuche] = useState("");
+  const [modulAuswahlOffen, setModulAuswahlOffen] = useState(false);
+  const [modulSuche, setModulSuche] = useState("");
+
+  function onChange(neu: ProfilData) {
+    setProfil(neu);
+    onAenderung(neu);
+  }
 
   async function bildWaehlen(index: number) {
     const uri = await bildAuswaehlen();
@@ -182,27 +227,71 @@ function ProfilBearbeiten({
     onChange({ ...profil, bilder: neueBilder });
   }
 
-  function hobbyHinzufuegen() {
-    const text = neuesHobby.trim();
-    if (!text) return;
-    onChange({ ...profil, hobbies: [...profil.hobbies, text] });
-    setNeuesHobby("");
+  function hobbyHinzufuegen(name: string) {
+    onChange({ ...profil, hobbies: [...profil.hobbies, name] });
   }
 
   function hobbyEntfernen(i: number) {
     onChange({ ...profil, hobbies: profil.hobbies.filter((_, idx) => idx !== i) });
   }
 
-  function modulHinzufuegen() {
-    const text = neuesModul.trim();
-    if (!text) return;
-    onChange({ ...profil, module: [...profil.module, text] });
-    setNeuesModul("");
+  function modulHinzufuegen(name: string) {
+    onChange({ ...profil, module: [...profil.module, name] });
   }
 
   function modulEntfernen(i: number) {
     onChange({ ...profil, module: profil.module.filter((_, idx) => idx !== i) });
   }
+
+  // Auswahl-Listen: noch nicht gewählte Einträge, optional per Suche gefiltert
+  const verfuegbareHobbies = HOBBY_KATALOG.filter(
+    (h) =>
+      !profil.hobbies.includes(h.name) &&
+      h.name.toLowerCase().includes(hobbySuche.trim().toLowerCase())
+  );
+  const verfuegbareModule = MODUL_KATALOG.filter(
+    (m) =>
+      !profil.module.includes(m) &&
+      m.toLowerCase().includes(modulSuche.trim().toLowerCase())
+  );
+
+  function frageHinzufuegen(frageId: string) {
+    if (profil.frageAntworten.length >= MAX_FRAGEN) return;
+    onChange({
+      ...profil,
+      frageAntworten: [...profil.frageAntworten, { frageId, antwort: "" }],
+    });
+    setFrageAuswahlOffen(false);
+  }
+
+  function frageEntfernen(frageId: string) {
+    onChange({
+      ...profil,
+      frageAntworten: profil.frageAntworten.filter((fa) => fa.frageId !== frageId),
+    });
+  }
+
+  function antwortAendern(frageId: string, text: string) {
+    onChange({
+      ...profil,
+      frageAntworten: profil.frageAntworten.map((fa) =>
+        fa.frageId === frageId ? { ...fa, antwort: text } : fa
+      ),
+    });
+  }
+
+  // Reihenfolge ändern: Antwort um eine Position nach oben/unten schieben.
+  function frageVerschieben(index: number, delta: -1 | 1) {
+    const ziel = index + delta;
+    if (ziel < 0 || ziel >= profil.frageAntworten.length) return;
+    const neu = [...profil.frageAntworten];
+    [neu[index], neu[ziel]] = [neu[ziel], neu[index]];
+    onChange({ ...profil, frageAntworten: neu });
+  }
+
+  const verfuegbareFragen = PROFIL_FRAGEN.filter(
+    (f) => !profil.frageAntworten.some((fa) => fa.frageId === f.id)
+  );
 
   return (
     <KeyboardAvoidingView
@@ -211,32 +300,42 @@ function ProfilBearbeiten({
     >
       <ScrollView style={stile.editContainer} contentContainerStyle={{ paddingBottom: 40 }}>
 
-        {/* Bilder */}
+        {/* Bilder: 2 Reihen à 5 Slots. Reihe 1 (= bilder[0..4]) erscheint
+            auch auf der Profilkarte, alle 10 in der ausführlichen Ansicht. */}
         <Text style={stile.editSektionTitel}>Bilder</Text>
-        <View style={stile.bildReihe}>
-          {profil.bilder.map((bild, i) => (
-            <TouchableOpacity
-              key={i}
-              style={stile.bildSlot}
-              onPress={() => bildWaehlen(i)}
-              onLongPress={() => bild && bildEntfernen(i)}
-            >
-              {bild ? (
-                <>
-                  <Image source={{ uri: bild }} style={stile.bildSlotBild} />
-                  <View style={stile.bildLoeschenBadge}>
-                    <Ionicons name="close" size={10} color="#fff" />
-                  </View>
-                </>
-              ) : (
-                <View style={stile.bildSlotLeer}>
-                  <Ionicons name="add" size={22} color="#8E8E93" />
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-        <Text style={stile.editHinweis}>Tippen zum Ändern · Gedrückt halten zum Entfernen</Text>
+        {[profil.bilder.slice(0, KP_BILDER), profil.bilder.slice(KP_BILDER, MAX_BILDER)].map(
+          (reihe, r) => (
+            <View key={r} style={[stile.bildReihe, r > 0 && { marginTop: 10 }]}>
+              {reihe.map((bild, i) => {
+                const index = r * KP_BILDER + i;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={stile.bildSlot}
+                    onPress={() => bildWaehlen(index)}
+                    onLongPress={() => bild && bildEntfernen(index)}
+                  >
+                    {bild ? (
+                      <>
+                        <Image source={{ uri: bild }} style={stile.bildSlotBild} />
+                        <View style={stile.bildLoeschenBadge}>
+                          <Ionicons name="close" size={10} color="#fff" />
+                        </View>
+                      </>
+                    ) : (
+                      <View style={stile.bildSlotLeer}>
+                        <Ionicons name="add" size={22} color="#8E8E93" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )
+        )}
+        <Text style={stile.editHinweis}>
+          Tippen zum Ändern · Halten zum Entfernen · Reihe 1 erscheint auf deiner Karte
+        </Text>
 
         {/* Bio */}
         <Text style={stile.editSektionTitel}>Bio</Text>
@@ -253,66 +352,197 @@ function ProfilBearbeiten({
           <Text style={stile.zeichenZaehler}>{profil.bio.length}/200</Text>
         </View>
 
-        {/* Hobbies */}
-        <Text style={stile.editSektionTitel}>Hobbies</Text>
+        {/* Profil-Fragen: bis zu 5 aus dem Katalog wählen und beantworten */}
+        <Text style={stile.editSektionTitel}>
+          Fragen über dich ({profil.frageAntworten.length}/{MAX_FRAGEN})
+        </Text>
         <View style={stile.editSektion}>
-          <View style={stile.tagReiheEdit}>
-            {profil.hobbies.map((h, i) => (
+          {profil.frageAntworten.map((fa, i) => (
+            <View key={fa.frageId} style={[stile.frageKarte, i > 0 && { marginTop: 12 }]}>
+              <View style={stile.frageKopfZeile}>
+                <Text style={stile.frageKopfText}>{frageText(fa.frageId)}</Text>
+                <View style={stile.frageAktionen}>
+                  <TouchableOpacity
+                    onPress={() => frageVerschieben(i, -1)}
+                    disabled={i === 0}
+                    style={{ opacity: i === 0 ? 0.25 : 1 }}
+                  >
+                    <Ionicons name="chevron-up" size={18} color="#8E8E93" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => frageVerschieben(i, 1)}
+                    disabled={i === profil.frageAntworten.length - 1}
+                    style={{ opacity: i === profil.frageAntworten.length - 1 ? 0.25 : 1 }}
+                  >
+                    <Ionicons name="chevron-down" size={18} color="#8E8E93" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => frageEntfernen(fa.frageId)}>
+                    <Ionicons name="close" size={18} color="#8E8E93" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <TextInput
+                style={stile.antwortInput}
+                value={fa.antwort}
+                onChangeText={(t) => antwortAendern(fa.frageId, t)}
+                placeholder="Deine Antwort…"
+                placeholderTextColor="#aaa"
+                multiline
+                maxLength={MAX_ANTWORT_LAENGE}
+              />
+              <Text style={stile.zeichenZaehler}>
+                {fa.antwort.length}/{MAX_ANTWORT_LAENGE}
+              </Text>
+            </View>
+          ))}
+
+          {profil.frageAntworten.length < MAX_FRAGEN && (
+            <TouchableOpacity
+              style={[
+                stile.frageHinzufuegenKnopf,
+                profil.frageAntworten.length > 0 && { marginTop: 12 },
+              ]}
+              onPress={() => setFrageAuswahlOffen((v) => !v)}
+            >
+              <Ionicons
+                name={frageAuswahlOffen ? "chevron-up" : "add"}
+                size={18}
+                color="#007AFF"
+              />
+              <Text style={stile.frageHinzufuegenText}>
+                {frageAuswahlOffen ? "Auswahl schließen" : "Frage hinzufügen"}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {frageAuswahlOffen &&
+            verfuegbareFragen.map((f) => (
               <TouchableOpacity
-                key={i}
-                style={stile.tagEdit}
-                onPress={() => hobbyEntfernen(i)}
+                key={f.id}
+                style={stile.frageAuswahlZeile}
+                onPress={() => frageHinzufuegen(f.id)}
               >
-                <Text style={stile.tagEditText}>{h}</Text>
-                <Ionicons name="close" size={12} color="#666" style={{ marginLeft: 4 }} />
+                <Text style={stile.frageAuswahlText}>{f.text}</Text>
               </TouchableOpacity>
             ))}
-          </View>
-          <View style={stile.hinzufuegenZeile}>
-            <TextInput
-              style={stile.tagInput}
-              value={neuesHobby}
-              onChangeText={setNeuesHobby}
-              placeholder="Hobby hinzufügen…"
-              placeholderTextColor="#aaa"
-              onSubmitEditing={hobbyHinzufuegen}
-              returnKeyType="done"
-            />
-            <TouchableOpacity style={stile.hinzufuegenButton} onPress={hobbyHinzufuegen}>
-              <Ionicons name="add" size={20} color="#007AFF" />
-            </TouchableOpacity>
-          </View>
         </View>
 
-        {/* Module */}
+        {/* Hobbies: Auswahl aus dem Katalog (mit Icons), kein Freitext */}
+        <Text style={stile.editSektionTitel}>Hobbies</Text>
+        <View style={stile.editSektion}>
+          {profil.hobbies.length > 0 && (
+            <View style={stile.tagReiheEdit}>
+              {profil.hobbies.map((h, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={stile.tagEdit}
+                  onPress={() => hobbyEntfernen(i)}
+                >
+                  <Ionicons name={hobbyIcon(h)} size={13} color="#1a1a1a" style={{ marginRight: 5 }} />
+                  <Text style={stile.tagEditText}>{h}</Text>
+                  <Ionicons name="close" size={12} color="#666" style={{ marginLeft: 4 }} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity
+            style={stile.frageHinzufuegenKnopf}
+            onPress={() => setHobbyAuswahlOffen((v) => !v)}
+          >
+            <Ionicons
+              name={hobbyAuswahlOffen ? "chevron-up" : "add"}
+              size={18}
+              color="#007AFF"
+            />
+            <Text style={stile.frageHinzufuegenText}>
+              {hobbyAuswahlOffen ? "Auswahl schließen" : "Hobby hinzufügen"}
+            </Text>
+          </TouchableOpacity>
+          {hobbyAuswahlOffen && (
+            <>
+              <TextInput
+                style={stile.sucheInput}
+                value={hobbySuche}
+                onChangeText={setHobbySuche}
+                placeholder="Suchen…"
+                placeholderTextColor="#aaa"
+                autoCorrect={false}
+              />
+              <View style={stile.tagReiheEdit}>
+                {verfuegbareHobbies.map((h) => (
+                  <TouchableOpacity
+                    key={h.name}
+                    style={stile.tagAuswahl}
+                    onPress={() => hobbyHinzufuegen(h.name)}
+                  >
+                    <Ionicons name={h.icon} size={13} color="#1a1a1a" style={{ marginRight: 5 }} />
+                    <Text style={stile.tagEditText}>{h.name}</Text>
+                  </TouchableOpacity>
+                ))}
+                {verfuegbareHobbies.length === 0 && (
+                  <Text style={stile.keineTreffer}>Keine Treffer.</Text>
+                )}
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Module: Auswahl aus der Moduldatenbank des Studiengangs */}
         <Text style={stile.editSektionTitel}>Module</Text>
         <View style={stile.editSektion}>
-          <View style={stile.tagReiheEdit}>
-            {profil.module.map((m, i) => (
-              <TouchableOpacity
-                key={i}
-                style={stile.tagEdit}
-                onPress={() => modulEntfernen(i)}
-              >
-                <Text style={stile.tagEditText}>{m}</Text>
-                <Ionicons name="close" size={12} color="#666" style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View style={stile.hinzufuegenZeile}>
-            <TextInput
-              style={stile.tagInput}
-              value={neuesModul}
-              onChangeText={setNeuesModul}
-              placeholder="Modul hinzufügen…"
-              placeholderTextColor="#aaa"
-              onSubmitEditing={modulHinzufuegen}
-              returnKeyType="done"
+          {profil.module.length > 0 && (
+            <View style={stile.tagReiheEdit}>
+              {profil.module.map((m, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={stile.tagEdit}
+                  onPress={() => modulEntfernen(i)}
+                >
+                  <Text style={stile.tagEditText}>{m}</Text>
+                  <Ionicons name="close" size={12} color="#666" style={{ marginLeft: 4 }} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity
+            style={stile.frageHinzufuegenKnopf}
+            onPress={() => setModulAuswahlOffen((v) => !v)}
+          >
+            <Ionicons
+              name={modulAuswahlOffen ? "chevron-up" : "add"}
+              size={18}
+              color="#007AFF"
             />
-            <TouchableOpacity style={stile.hinzufuegenButton} onPress={modulHinzufuegen}>
-              <Ionicons name="add" size={20} color="#007AFF" />
-            </TouchableOpacity>
-          </View>
+            <Text style={stile.frageHinzufuegenText}>
+              {modulAuswahlOffen ? "Auswahl schließen" : "Modul hinzufügen"}
+            </Text>
+          </TouchableOpacity>
+          {modulAuswahlOffen && (
+            <>
+              <TextInput
+                style={stile.sucheInput}
+                value={modulSuche}
+                onChangeText={setModulSuche}
+                placeholder="Moduldatenbank durchsuchen…"
+                placeholderTextColor="#aaa"
+                autoCorrect={false}
+              />
+              <View style={stile.tagReiheEdit}>
+                {verfuegbareModule.map((m) => (
+                  <TouchableOpacity
+                    key={m}
+                    style={stile.tagAuswahl}
+                    onPress={() => modulHinzufuegen(m)}
+                  >
+                    <Text style={stile.tagEditText}>{m}</Text>
+                  </TouchableOpacity>
+                ))}
+                {verfuegbareModule.length === 0 && (
+                  <Text style={stile.keineTreffer}>Keine Treffer.</Text>
+                )}
+              </View>
+            </>
+          )}
         </View>
 
         {/* Nicht bearbeitbare Felder (Info) */}
@@ -342,17 +572,32 @@ function ProfilBearbeiten({
 
 export default function ProfilScreen() {
   const navigation = useNavigation();
+  const { width } = useWindowDimensions();
   const [profil, setProfil] = useState<ProfilData>(DEFAULT_PROFIL);
   const [editModus, setEditModus] = useState(false);
+  const [seite, setSeite] = useState(0);
+  // false, solange der Finger auf dem Bilder-Carousel der AP liegt —
+  // sonst frisst der Pager dessen horizontale Swipes (Gesten-Konflikt
+  // zweier verschachtelter horizontaler ScrollViews).
+  const [pagerAktiv, setPagerAktiv] = useState(true);
   const editProfilRef = useRef<ProfilData>(profil);
 
-  // Profil laden
+  // Profil laden. Ältere gespeicherte Profile haben nur 5 Bild-Slots und
+  // keine frageAntworten — beim Laden aufs neue Format auffüllen.
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((data) => {
       if (data) {
         const geladen = JSON.parse(data);
-        setProfil(geladen);
-        editProfilRef.current = geladen;
+        const bilder: (string | null)[] = [...(geladen.bilder ?? [])];
+        while (bilder.length < MAX_BILDER) bilder.push(null);
+        const voll: ProfilData = {
+          ...DEFAULT_PROFIL,
+          ...geladen,
+          bilder,
+          frageAntworten: geladen.frageAntworten ?? [],
+        };
+        setProfil(voll);
+        editProfilRef.current = voll;
       }
     });
   }, []);
@@ -364,9 +609,16 @@ export default function ProfilScreen() {
         <TouchableOpacity
           onPress={async () => {
             if (editModus) {
-              // Speichern
-              await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(editProfilRef.current));
-              setProfil({ ...editProfilRef.current });
+              // Speichern — Fragen ohne geschriebene Antwort fliegen raus
+              const bereinigt: ProfilData = {
+                ...editProfilRef.current,
+                frageAntworten: editProfilRef.current.frageAntworten
+                  .map((fa) => ({ ...fa, antwort: fa.antwort.trim() }))
+                  .filter((fa) => fa.antwort.length > 0),
+              };
+              editProfilRef.current = bereinigt;
+              await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(bereinigt));
+              setProfil(bereinigt);
             }
             setEditModus((v) => !v);
           }}
@@ -395,7 +647,50 @@ export default function ProfilScreen() {
     );
   }
 
-  return <ProfilAnsicht profil={profil} />;
+  // Pager: Seite 1 = Profilkarte (KP), Seite 2 = ausführliche Ansicht (AP) —
+  // horizontal rüberswipen, der Stift-Button oben bearbeitet beides.
+  return (
+    <View style={{ flex: 1, backgroundColor: "#fff" }}>
+      <ScrollView
+        horizontal
+        pagingEnabled
+        scrollEnabled={pagerAktiv}
+        showsHorizontalScrollIndicator={false}
+        onScroll={(e) => {
+          const i = Math.round(e.nativeEvent.contentOffset.x / width);
+          if (i !== seite) setSeite(i);
+        }}
+        scrollEventThrottle={16}
+      >
+        <View style={{ width }}>
+          <ProfilAnsicht profil={profil} />
+        </View>
+        <View style={{ width }}>
+          <ProfilAusfuehrlich
+            profil={{
+              name: profil.name,
+              alter: profil.alter,
+              bilder: profil.bilder,
+              kurzbeschreibung: profil.bio,
+              uni: profil.uni,
+              studiengang: profil.studiengang,
+              module: profil.module,
+              hobbies: profil.hobbies,
+              frageAntworten: profil.frageAntworten,
+            }}
+            breite={width}
+            onCarouselTouch={(aktiv) => setPagerAktiv(!aktiv)}
+          />
+        </View>
+      </ScrollView>
+
+      <View style={stile.pagerDots} pointerEvents="none">
+        {[0, 1].map((i) => (
+          <View key={i} style={[stile.pagerDot, i === seite && stile.pagerDotAktiv]} />
+        ))}
+      </View>
+    </View>
+  );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -461,6 +756,8 @@ const stile = StyleSheet.create({
     gap: 5,
   },
   tag: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#F2F2F7",
     borderRadius: 14,
     paddingHorizontal: 10,
@@ -550,6 +847,105 @@ const stile = StyleSheet.create({
     color: "#aaa",
     textAlign: "right",
     marginTop: 4,
+  },
+
+  // Profil-Fragen (Edit-Modus)
+  frageKarte: {
+    backgroundColor: "#F2F2F7",
+    borderRadius: 12,
+    padding: 12,
+  },
+  frageKopfZeile: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  frageKopfText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1a1a1a",
+    lineHeight: 18,
+  },
+  frageAktionen: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  antwortInput: {
+    fontSize: 15,
+    color: "#1a1a1a",
+    minHeight: 44,
+    textAlignVertical: "top",
+    lineHeight: 21,
+    marginTop: 8,
+  },
+  frageHinzufuegenKnopf: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+  },
+  frageHinzufuegenText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#007AFF",
+  },
+  frageAuswahlZeile: {
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d1d1d6",
+  },
+  frageAuswahlText: {
+    fontSize: 14,
+    color: "#1a1a1a",
+    lineHeight: 19,
+  },
+
+  // Katalog-Auswahl (Hobbies/Module)
+  sucheInput: {
+    backgroundColor: "#F2F2F7",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 15,
+    color: "#1a1a1a",
+    marginBottom: 10,
+  },
+  tagAuswahl: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#d1d1d6",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  keineTreffer: {
+    fontSize: 13,
+    color: "#8E8E93",
+    paddingVertical: 4,
+  },
+
+  // KP↔AP-Pager
+  pagerDots: {
+    position: "absolute",
+    bottom: 10,
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  pagerDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#D1D1D6",
+  },
+  pagerDotAktiv: {
+    backgroundColor: "#007AFF",
   },
 
   // Tag-Bearbeitung
