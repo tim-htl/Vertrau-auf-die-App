@@ -17,8 +17,22 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ProfilAusfuehrlich } from "../../components/ProfilAusfuehrlich";
+import {
+  frageText,
+  MAX_ANTWORT_LAENGE,
+  MAX_FRAGEN,
+  PROFIL_FRAGEN,
+  type FrageAntwort,
+} from "../../data/fragen";
 
 // ─── Typen & Standardwerte ────────────────────────────────────────────────────
+
+// 10 Bild-Slots: die ersten 5 erscheinen auch auf der Profilkarte (KP),
+// alle 10 in der ausführlichen Ansicht (AP) — ein gemeinsames Array,
+// keine getrennten Listen.
+const MAX_BILDER = 10;
+const KP_BILDER = 5;
 
 type ProfilData = {
   // Nicht bearbeitbar
@@ -31,6 +45,7 @@ type ProfilData = {
   bio: string;
   hobbies: string[];
   module: string[];
+  frageAntworten: FrageAntwort[];
 };
 
 const DEFAULT_PROFIL: ProfilData = {
@@ -38,10 +53,11 @@ const DEFAULT_PROFIL: ProfilData = {
   alter: "22",
   studiengang: "Studiengang",
   uni: "Universität",
-  bilder: [null, null, null, null, null],
+  bilder: Array(MAX_BILDER).fill(null),
   bio: "",
   hobbies: [],
   module: [],
+  frageAntworten: [],
 };
 
 const STORAGE_KEY = "profil_v2";
@@ -158,14 +174,24 @@ function TagZeile({ label, items }: { label: string; items: string[] }) {
 // ─── Bearbeitungs-Modus ───────────────────────────────────────────────────────
 
 function ProfilBearbeiten({
-  profil,
-  onChange,
+  profil: startProfil,
+  onChange: onAenderung,
 }: {
   profil: ProfilData;
   onChange: (p: ProfilData) => void;
 }) {
+  // Entwurf als lokaler State: der Parent re-rendert während des Bearbeitens
+  // nicht (Änderungen landen dort nur in einer Ref) — ohne eigenen State
+  // würden Tag-/Bild-/Fragen-Änderungen erst nach dem Speichern sichtbar.
+  const [profil, setProfil] = useState(startProfil);
   const [neuesHobby, setNeuesHobby] = useState("");
   const [neuesModul, setNeuesModul] = useState("");
+  const [frageAuswahlOffen, setFrageAuswahlOffen] = useState(false);
+
+  function onChange(neu: ProfilData) {
+    setProfil(neu);
+    onAenderung(neu);
+  }
 
   async function bildWaehlen(index: number) {
     const uri = await bildAuswaehlen();
@@ -204,6 +230,44 @@ function ProfilBearbeiten({
     onChange({ ...profil, module: profil.module.filter((_, idx) => idx !== i) });
   }
 
+  function frageHinzufuegen(frageId: string) {
+    if (profil.frageAntworten.length >= MAX_FRAGEN) return;
+    onChange({
+      ...profil,
+      frageAntworten: [...profil.frageAntworten, { frageId, antwort: "" }],
+    });
+    setFrageAuswahlOffen(false);
+  }
+
+  function frageEntfernen(frageId: string) {
+    onChange({
+      ...profil,
+      frageAntworten: profil.frageAntworten.filter((fa) => fa.frageId !== frageId),
+    });
+  }
+
+  function antwortAendern(frageId: string, text: string) {
+    onChange({
+      ...profil,
+      frageAntworten: profil.frageAntworten.map((fa) =>
+        fa.frageId === frageId ? { ...fa, antwort: text } : fa
+      ),
+    });
+  }
+
+  // Reihenfolge ändern: Antwort um eine Position nach oben/unten schieben.
+  function frageVerschieben(index: number, delta: -1 | 1) {
+    const ziel = index + delta;
+    if (ziel < 0 || ziel >= profil.frageAntworten.length) return;
+    const neu = [...profil.frageAntworten];
+    [neu[index], neu[ziel]] = [neu[ziel], neu[index]];
+    onChange({ ...profil, frageAntworten: neu });
+  }
+
+  const verfuegbareFragen = PROFIL_FRAGEN.filter(
+    (f) => !profil.frageAntworten.some((fa) => fa.frageId === f.id)
+  );
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -211,32 +275,42 @@ function ProfilBearbeiten({
     >
       <ScrollView style={stile.editContainer} contentContainerStyle={{ paddingBottom: 40 }}>
 
-        {/* Bilder */}
+        {/* Bilder: 2 Reihen à 5 Slots. Reihe 1 (= bilder[0..4]) erscheint
+            auch auf der Profilkarte, alle 10 in der ausführlichen Ansicht. */}
         <Text style={stile.editSektionTitel}>Bilder</Text>
-        <View style={stile.bildReihe}>
-          {profil.bilder.map((bild, i) => (
-            <TouchableOpacity
-              key={i}
-              style={stile.bildSlot}
-              onPress={() => bildWaehlen(i)}
-              onLongPress={() => bild && bildEntfernen(i)}
-            >
-              {bild ? (
-                <>
-                  <Image source={{ uri: bild }} style={stile.bildSlotBild} />
-                  <View style={stile.bildLoeschenBadge}>
-                    <Ionicons name="close" size={10} color="#fff" />
-                  </View>
-                </>
-              ) : (
-                <View style={stile.bildSlotLeer}>
-                  <Ionicons name="add" size={22} color="#8E8E93" />
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-        <Text style={stile.editHinweis}>Tippen zum Ändern · Gedrückt halten zum Entfernen</Text>
+        {[profil.bilder.slice(0, KP_BILDER), profil.bilder.slice(KP_BILDER, MAX_BILDER)].map(
+          (reihe, r) => (
+            <View key={r} style={[stile.bildReihe, r > 0 && { marginTop: 10 }]}>
+              {reihe.map((bild, i) => {
+                const index = r * KP_BILDER + i;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={stile.bildSlot}
+                    onPress={() => bildWaehlen(index)}
+                    onLongPress={() => bild && bildEntfernen(index)}
+                  >
+                    {bild ? (
+                      <>
+                        <Image source={{ uri: bild }} style={stile.bildSlotBild} />
+                        <View style={stile.bildLoeschenBadge}>
+                          <Ionicons name="close" size={10} color="#fff" />
+                        </View>
+                      </>
+                    ) : (
+                      <View style={stile.bildSlotLeer}>
+                        <Ionicons name="add" size={22} color="#8E8E93" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )
+        )}
+        <Text style={stile.editHinweis}>
+          Tippen zum Ändern · Halten zum Entfernen · Reihe 1 erscheint auf deiner Karte
+        </Text>
 
         {/* Bio */}
         <Text style={stile.editSektionTitel}>Bio</Text>
@@ -251,6 +325,81 @@ function ProfilBearbeiten({
             maxLength={200}
           />
           <Text style={stile.zeichenZaehler}>{profil.bio.length}/200</Text>
+        </View>
+
+        {/* Profil-Fragen: bis zu 5 aus dem Katalog wählen und beantworten */}
+        <Text style={stile.editSektionTitel}>
+          Fragen über dich ({profil.frageAntworten.length}/{MAX_FRAGEN})
+        </Text>
+        <View style={stile.editSektion}>
+          {profil.frageAntworten.map((fa, i) => (
+            <View key={fa.frageId} style={[stile.frageKarte, i > 0 && { marginTop: 12 }]}>
+              <View style={stile.frageKopfZeile}>
+                <Text style={stile.frageKopfText}>{frageText(fa.frageId)}</Text>
+                <View style={stile.frageAktionen}>
+                  <TouchableOpacity
+                    onPress={() => frageVerschieben(i, -1)}
+                    disabled={i === 0}
+                    style={{ opacity: i === 0 ? 0.25 : 1 }}
+                  >
+                    <Ionicons name="chevron-up" size={18} color="#8E8E93" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => frageVerschieben(i, 1)}
+                    disabled={i === profil.frageAntworten.length - 1}
+                    style={{ opacity: i === profil.frageAntworten.length - 1 ? 0.25 : 1 }}
+                  >
+                    <Ionicons name="chevron-down" size={18} color="#8E8E93" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => frageEntfernen(fa.frageId)}>
+                    <Ionicons name="close" size={18} color="#8E8E93" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <TextInput
+                style={stile.antwortInput}
+                value={fa.antwort}
+                onChangeText={(t) => antwortAendern(fa.frageId, t)}
+                placeholder="Deine Antwort…"
+                placeholderTextColor="#aaa"
+                multiline
+                maxLength={MAX_ANTWORT_LAENGE}
+              />
+              <Text style={stile.zeichenZaehler}>
+                {fa.antwort.length}/{MAX_ANTWORT_LAENGE}
+              </Text>
+            </View>
+          ))}
+
+          {profil.frageAntworten.length < MAX_FRAGEN && (
+            <TouchableOpacity
+              style={[
+                stile.frageHinzufuegenKnopf,
+                profil.frageAntworten.length > 0 && { marginTop: 12 },
+              ]}
+              onPress={() => setFrageAuswahlOffen((v) => !v)}
+            >
+              <Ionicons
+                name={frageAuswahlOffen ? "chevron-up" : "add"}
+                size={18}
+                color="#007AFF"
+              />
+              <Text style={stile.frageHinzufuegenText}>
+                {frageAuswahlOffen ? "Auswahl schließen" : "Frage hinzufügen"}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {frageAuswahlOffen &&
+            verfuegbareFragen.map((f) => (
+              <TouchableOpacity
+                key={f.id}
+                style={stile.frageAuswahlZeile}
+                onPress={() => frageHinzufuegen(f.id)}
+              >
+                <Text style={stile.frageAuswahlText}>{f.text}</Text>
+              </TouchableOpacity>
+            ))}
         </View>
 
         {/* Hobbies */}
@@ -342,17 +491,28 @@ function ProfilBearbeiten({
 
 export default function ProfilScreen() {
   const navigation = useNavigation();
+  const { width } = useWindowDimensions();
   const [profil, setProfil] = useState<ProfilData>(DEFAULT_PROFIL);
   const [editModus, setEditModus] = useState(false);
+  const [seite, setSeite] = useState(0);
   const editProfilRef = useRef<ProfilData>(profil);
 
-  // Profil laden
+  // Profil laden. Ältere gespeicherte Profile haben nur 5 Bild-Slots und
+  // keine frageAntworten — beim Laden aufs neue Format auffüllen.
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((data) => {
       if (data) {
         const geladen = JSON.parse(data);
-        setProfil(geladen);
-        editProfilRef.current = geladen;
+        const bilder: (string | null)[] = [...(geladen.bilder ?? [])];
+        while (bilder.length < MAX_BILDER) bilder.push(null);
+        const voll: ProfilData = {
+          ...DEFAULT_PROFIL,
+          ...geladen,
+          bilder,
+          frageAntworten: geladen.frageAntworten ?? [],
+        };
+        setProfil(voll);
+        editProfilRef.current = voll;
       }
     });
   }, []);
@@ -364,9 +524,16 @@ export default function ProfilScreen() {
         <TouchableOpacity
           onPress={async () => {
             if (editModus) {
-              // Speichern
-              await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(editProfilRef.current));
-              setProfil({ ...editProfilRef.current });
+              // Speichern — Fragen ohne geschriebene Antwort fliegen raus
+              const bereinigt: ProfilData = {
+                ...editProfilRef.current,
+                frageAntworten: editProfilRef.current.frageAntworten
+                  .map((fa) => ({ ...fa, antwort: fa.antwort.trim() }))
+                  .filter((fa) => fa.antwort.length > 0),
+              };
+              editProfilRef.current = bereinigt;
+              await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(bereinigt));
+              setProfil(bereinigt);
             }
             setEditModus((v) => !v);
           }}
@@ -395,7 +562,48 @@ export default function ProfilScreen() {
     );
   }
 
-  return <ProfilAnsicht profil={profil} />;
+  // Pager: Seite 1 = Profilkarte (KP), Seite 2 = ausführliche Ansicht (AP) —
+  // horizontal rüberswipen, der Stift-Button oben bearbeitet beides.
+  return (
+    <View style={{ flex: 1, backgroundColor: "#fff" }}>
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScroll={(e) => {
+          const i = Math.round(e.nativeEvent.contentOffset.x / width);
+          if (i !== seite) setSeite(i);
+        }}
+        scrollEventThrottle={16}
+      >
+        <View style={{ width }}>
+          <ProfilAnsicht profil={profil} />
+        </View>
+        <View style={{ width }}>
+          <ProfilAusfuehrlich
+            profil={{
+              name: profil.name,
+              alter: profil.alter,
+              bilder: profil.bilder,
+              kurzbeschreibung: profil.bio,
+              uni: profil.uni,
+              studiengang: profil.studiengang,
+              module: profil.module,
+              hobbies: profil.hobbies,
+              frageAntworten: profil.frageAntworten,
+            }}
+            breite={width}
+          />
+        </View>
+      </ScrollView>
+
+      <View style={stile.pagerDots} pointerEvents="none">
+        {[0, 1].map((i) => (
+          <View key={i} style={[stile.pagerDot, i === seite && stile.pagerDotAktiv]} />
+        ))}
+      </View>
+    </View>
+  );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -550,6 +758,79 @@ const stile = StyleSheet.create({
     color: "#aaa",
     textAlign: "right",
     marginTop: 4,
+  },
+
+  // Profil-Fragen (Edit-Modus)
+  frageKarte: {
+    backgroundColor: "#F2F2F7",
+    borderRadius: 12,
+    padding: 12,
+  },
+  frageKopfZeile: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  frageKopfText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1a1a1a",
+    lineHeight: 18,
+  },
+  frageAktionen: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  antwortInput: {
+    fontSize: 15,
+    color: "#1a1a1a",
+    minHeight: 44,
+    textAlignVertical: "top",
+    lineHeight: 21,
+    marginTop: 8,
+  },
+  frageHinzufuegenKnopf: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+  },
+  frageHinzufuegenText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#007AFF",
+  },
+  frageAuswahlZeile: {
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d1d1d6",
+  },
+  frageAuswahlText: {
+    fontSize: 14,
+    color: "#1a1a1a",
+    lineHeight: 19,
+  },
+
+  // KP↔AP-Pager
+  pagerDots: {
+    position: "absolute",
+    bottom: 10,
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  pagerDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#D1D1D6",
+  },
+  pagerDotAktiv: {
+    backgroundColor: "#007AFF",
   },
 
   // Tag-Bearbeitung
