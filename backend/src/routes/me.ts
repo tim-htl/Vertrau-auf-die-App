@@ -10,7 +10,8 @@ const updateMeSchema = z
     alter: z.number().int().min(16).max(120).nullable(),
     kurzbeschreibung: z.string().trim().max(500).nullable(),
     bilder: z.array(z.string().url()).max(10),
-    hobbies: z.array(z.string().trim().min(1).max(40)).max(20),
+    // hobbies laufen seit dem Hobby-Katalog über user_hobbies
+    // (eigener Endpoint folgt in Phase 4d), nicht mehr über PATCH /me.
     studiengangId: z.string().uuid().nullable(),
   })
   .partial();

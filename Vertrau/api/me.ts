@@ -29,7 +29,8 @@ export type PatchMeBody = Partial<{
   alter: number | null;
   kurzbeschreibung: string | null;
   bilder: string[];
-  hobbies: string[];
+  // hobbies laufen über den Hobby-Katalog (user_hobbies, Phase 4d),
+  // nicht mehr über PATCH /me
   studiengangId: string | null;
 }>;
 

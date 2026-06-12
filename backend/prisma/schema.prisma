@@ -75,13 +75,13 @@ model Profile {
   geburtsdatum     DateTime? @db.Date
   kurzbeschreibung String?
   bilder           String[]  @default([])
-  hobbies          String[]  @default([])
 
   studiengangId String?      @db.Uuid
   studiengang   Studiengang? @relation(fields: [studiengangId], references: [id], onDelete: SetNull)
 
   belegteModule UserModul[]
   frageAntworten ProfilFrageAntwort[]
+  hobbies        UserHobby[]
 
   aktivitaetenAlsAdmin    Aktivitaet[]          @relation("AktivitaetAdmin")
   aktivitaetenTeilnahmen  AktivitaetTeilnehmer[]
@@ -330,6 +330,40 @@ model ProfilFrageAntwort {
 
   @@id([profileId, frageId])
   @@map("profil_frage_antworten")
+}
+
+// Hobby-Katalog (ersetzt die frühere Freitext-Spalte profiles.hobbies).
+// icon = Ionicons-Name fürs Frontend. Entfernen läuft über aktiv=false
+// (Soft-Delete wie locations/profil_fragen), damit User-Zuordnungen
+// erhalten bleiben.
+model Hobby {
+  id   String @id @default(uuid()) @db.Uuid
+  name String @unique
+  icon String
+
+  aktiv      Boolean @default(true)
+  sortierung Int     @default(0)
+
+  users UserHobby[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("hobbies")
+}
+
+// Hobby-Zuordnung eines Users — Join-Tabelle analog user_module.
+model UserHobby {
+  profileId String @db.Uuid
+  hobbyId   String @db.Uuid
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  hobby   Hobby   @relation(fields: [hobbyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([profileId, hobbyId])
+  @@map("user_hobbies")
 }
 
 // ── Chat-System ──────────────────────────────────────────────────────────────

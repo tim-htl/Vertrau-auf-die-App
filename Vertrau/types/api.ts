@@ -38,7 +38,8 @@ export type Me = {
   alter: number | null;
   kurzbeschreibung: string | null;
   bilder: string[];
-  hobbies: string[];
+  // hobbies: seit dem Hobby-Katalog (user_hobbies) nicht mehr Teil des
+  // Profile-Records; kommen in Phase 4d als eigene Struktur dazu.
   studiengangId: UUID | null;
   uniVerified: boolean;
   createdAt: ISODateTime;
@@ -129,7 +130,7 @@ export type Person = {
   alter: number | null;
   kurzbeschreibung: string | null;
   bilder: string[];
-  hobbies: string[];
+  // hobbies: siehe Me — folgt in Phase 4d über user_hobbies
   uniVerified: boolean;
   uni: { id: UUID; name: string; kuerzel: string } | null;
   studiengang: { id: UUID; name: string; abschluss: Abschluss } | null;
