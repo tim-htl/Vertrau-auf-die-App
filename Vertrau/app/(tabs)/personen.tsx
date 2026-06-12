@@ -1,17 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
+  Animated,
   FlatList,
   Image,
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { hobbyIcon } from "../../data/hobbies";
 import { DEMO_PERSONEN, type Person } from "../../data/personen";
+import { ladeGelikte, likePerson, resetSwipes } from "../../data/swipes";
 
 // ─── Bild-Platzhalter ─────────────────────────────────────────────────────────
 
@@ -141,6 +146,91 @@ export function PersonenKarte({
   );
 }
 
+// ─── Swipe-Karte (Tinder-Mechanik, nur Rechts-Swipe = Like) ───────────────────
+//
+// Die Karte folgt dem Finger nach rechts (leichte Rotation + "FREUNDE?"-
+// Badge), ab der Schwelle fliegt sie raus und löst das Like aus. Links
+// gibt es nur Widerstand (kein Pass — bewusste Entscheidung). Vertikales
+// Blättern der FlatList bleibt unberührt: der PanResponder greift nur,
+// wenn die Bewegung klar horizontal ist.
+
+function SwipeKarte({
+  person,
+  breite,
+  hoehe,
+  onLike,
+  onOeffnen,
+}: {
+  person: Person;
+  breite: number;
+  hoehe: number;
+  onLike: () => void;
+  onOeffnen: () => void;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+
+  // PanResponder wird einmal erzeugt — onLike per Ref aktuell halten,
+  // damit keine veraltete Closure feuert.
+  const onLikeRef = useRef(onLike);
+  onLikeRef.current = onLike;
+
+  const zurueckFedern = () =>
+    Animated.spring(translateX, {
+      toValue: 0,
+      friction: 6,
+      useNativeDriver: true,
+    }).start();
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderMove: (_e, g) => {
+        // nach links nur mit starkem Widerstand (kein Pass)
+        translateX.setValue(g.dx > 0 ? g.dx : g.dx / 5);
+      },
+      onPanResponderRelease: (_e, g) => {
+        if (g.dx > breite * 0.35) {
+          Animated.timing(translateX, {
+            toValue: breite * 1.3,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => onLikeRef.current());
+        } else {
+          zurueckFedern();
+        }
+      },
+      onPanResponderTerminate: zurueckFedern,
+    })
+  ).current;
+
+  const rotation = translateX.interpolate({
+    inputRange: [-breite, 0, breite],
+    outputRange: ["-6deg", "0deg", "6deg"],
+  });
+  const badgeOpacity = translateX.interpolate({
+    inputRange: [0, breite * 0.25],
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
+
+  return (
+    <Animated.View
+      {...panResponder.panHandlers}
+      style={{ transform: [{ translateX }, { rotate: rotation }] }}
+    >
+      <Pressable onPress={onOeffnen}>
+        <PersonenKarte person={person} breite={breite} hoehe={hoehe} />
+      </Pressable>
+
+      {/* Like-Badge, wird beim Ziehen sichtbar */}
+      <Animated.View style={[styles.likeBadge, { opacity: badgeOpacity }]} pointerEvents="none">
+        <Text style={styles.likeBadgeText}>FREUNDE?</Text>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
 // ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
 export default function PersonenScreen() {
@@ -153,10 +243,71 @@ export default function PersonenScreen() {
   // verschiebt sich der Abstand beim Swipen zwischen Profilen).
   const karteHoehe = height - insets.top - TAB_BAR - insets.bottom;
 
+  // Feed = Demo-Personen minus bereits gelikte (persistiert)
+  const [feed, setFeed] = useState<Person[] | null>(null);
+
+  // Match-Banner ("dezenter Hinweis" statt Vollbild-Overlay)
+  const [matchInfo, setMatchInfo] = useState<{ name: string; chatId: string } | null>(null);
+  const bannerY = useRef(new Animated.Value(-120)).current;
+  const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    ladeGelikte().then((gelikte) =>
+      setFeed(DEMO_PERSONEN.filter((p) => !gelikte.includes(p.id)))
+    );
+    return () => {
+      if (bannerTimer.current) clearTimeout(bannerTimer.current);
+    };
+  }, []);
+
+  function zeigeMatchBanner(name: string, chatId: string) {
+    setMatchInfo({ name, chatId });
+    Animated.spring(bannerY, { toValue: 0, friction: 7, useNativeDriver: true }).start();
+    if (bannerTimer.current) clearTimeout(bannerTimer.current);
+    bannerTimer.current = setTimeout(verbergeMatchBanner, 4000);
+  }
+
+  function verbergeMatchBanner() {
+    Animated.timing(bannerY, { toValue: -120, duration: 250, useNativeDriver: true }).start(
+      () => setMatchInfo(null)
+    );
+  }
+
+  async function personGeliked(person: Person) {
+    // Karte sofort aus dem Feed nehmen, dann Like verarbeiten
+    setFeed((f) => (f ? f.filter((p) => p.id !== person.id) : f));
+    const ergebnis = await likePerson(person);
+    if (ergebnis.match && ergebnis.chatId) {
+      zeigeMatchBanner(person.name, ergebnis.chatId);
+    }
+  }
+
+  async function demoZuruecksetzen() {
+    await resetSwipes();
+    setFeed(DEMO_PERSONEN);
+  }
+
+  if (feed === null) {
+    return <View style={styles.hintergrund} />;
+  }
+
+  if (feed.length === 0) {
+    return (
+      <View style={[styles.hintergrund, styles.leerContainer, { paddingTop: insets.top }]}>
+        <Ionicons name="people-outline" size={48} color="#C7C7CC" />
+        <Text style={styles.leerTitel}>Keine weiteren Profile</Text>
+        <Text style={styles.leerText}>Du hast alle Profile durchgeswiped.</Text>
+        <TouchableOpacity style={styles.resetKnopf} onPress={demoZuruecksetzen}>
+          <Text style={styles.resetKnopfText}>Demo zurücksetzen</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.hintergrund, { paddingTop: insets.top }]}>
       <FlatList
-        data={DEMO_PERSONEN}
+        data={feed}
         keyExtractor={(item) => item.id}
         pagingEnabled
         showsVerticalScrollIndicator={false}
@@ -164,12 +315,13 @@ export default function PersonenScreen() {
         snapToInterval={karteHoehe}
         snapToAlignment="start"
         renderItem={({ item }) => (
-          // Tap auf die Karte öffnet die ausführliche Profilansicht.
-          // Vertikales Swipen (Profil-Wechsel) bleibt unberührt — der
-          // Scroll-Gestus bricht den Press automatisch ab.
-          <Pressable onPress={() => router.push(`/person/${item.id}`)}>
-            <PersonenKarte person={item} breite={width} hoehe={karteHoehe} />
-          </Pressable>
+          <SwipeKarte
+            person={item}
+            breite={width}
+            hoehe={karteHoehe}
+            onLike={() => personGeliked(item)}
+            onOeffnen={() => router.push(`/person/${item.id}`)}
+          />
         )}
         getItemLayout={(_, index) => ({
           length: karteHoehe,
@@ -177,6 +329,34 @@ export default function PersonenScreen() {
           index,
         })}
       />
+
+      {/* Match-Banner */}
+      {matchInfo && (
+        <Animated.View
+          style={[
+            styles.matchBanner,
+            { top: insets.top + 8, transform: [{ translateY: bannerY }] },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.matchBannerInhalt}
+            activeOpacity={0.85}
+            onPress={() => {
+              const chatId = matchInfo.chatId;
+              verbergeMatchBanner();
+              router.push(`/chat/${chatId}`);
+            }}
+          >
+            <Ionicons name="people" size={22} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.matchBannerTitel}>Ihr seid jetzt Freunde! 🎉</Text>
+              <Text style={styles.matchBannerText}>
+                {matchInfo.name} hat dich auch geliked — tippe, um zu chatten.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -187,6 +367,88 @@ const styles = StyleSheet.create({
   hintergrund: {
     flex: 1,
     backgroundColor: "#fff",
+  },
+
+  // Like-Badge auf der Swipe-Karte
+  likeBadge: {
+    position: "absolute",
+    top: 32,
+    left: 24,
+    borderWidth: 3,
+    borderColor: "#34C759",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    transform: [{ rotate: "-15deg" }],
+    backgroundColor: "rgba(255,255,255,0.85)",
+  },
+  likeBadgeText: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#34C759",
+    letterSpacing: 1,
+  },
+
+  // Match-Banner
+  matchBanner: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+  },
+  matchBannerInhalt: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#34C759",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  matchBannerTitel: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  matchBannerText: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 13,
+    marginTop: 1,
+  },
+
+  // Leerer Feed
+  leerContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 32,
+  },
+  leerTitel: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1a1a1a",
+    marginTop: 8,
+  },
+  leerText: {
+    fontSize: 14,
+    color: "#8E8E93",
+    textAlign: "center",
+  },
+  resetKnopf: {
+    marginTop: 16,
+    backgroundColor: "#F2F2F7",
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  resetKnopfText: {
+    color: "#007AFF",
+    fontSize: 15,
+    fontWeight: "600",
   },
 
   karte: {
