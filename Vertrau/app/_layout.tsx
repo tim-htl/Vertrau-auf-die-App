@@ -1,23 +1,19 @@
 import { Stack } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { AuthProvider, useAuth } from "../lib/auth-context";
-import { OnboardingProvider, useOnboarding } from "../lib/onboarding-context";
 
-// AuthGate + OnboardingGate: expo-router rendert nur die Screens, deren
-// Stack.Protected-Guard true ist. Drei sich gegenseitig ausschließende
-// Zustände:
-//   - keine Session                      → (auth) Login/Register
-//   - Session, Onboarding offen          → onboarding-Wizard
-//   - Session, Onboarding abgeschlossen  → (tabs) + Detail-Screens
-// Beim Wechsel eines Guards (Login, Onboarding-Abschluss) leitet
-// expo-router automatisch auf die erste verfügbare Route um.
+// AuthGate: expo-router rendert nur die Screens, deren Stack.Protected-Guard
+// true ist. Da der Account erst am Ende des Onboardings erstellt wird, gilt:
+//   - keine Session → Login ODER Onboarding (neuer Nutzer baut Profil auf,
+//     der Account entsteht im letzten Onboarding-Schritt)
+//   - Session vorhanden → (tabs) + Detail-Screens
+// "Session vorhanden" ist damit gleichbedeutend mit "Onboarding fertig" —
+// ein separates Flag ist nicht nötig. Beim Account-Erstellen (signUp)
+// entsteht die Session und expo-router wechselt automatisch zu den Tabs.
 function RootNavigator() {
-  const { session, loading: authLoading } = useAuth();
-  const { onboardingDone, loading: onboardingLoading } = useOnboarding();
+  const { session, loading } = useAuth();
 
-  // Solange Session ODER Onboarding-Flag noch laden → Spinner statt
-  // kurzem Aufblitzen des falschen Bereichs.
-  if (authLoading || onboardingLoading) {
+  if (loading) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator size="large" color="#007AFF" />
@@ -29,16 +25,13 @@ function RootNavigator() {
     <Stack>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      </Stack.Protected>
-
-      <Stack.Protected guard={!!session && !onboardingDone}>
         <Stack.Screen
           name="onboarding"
           options={{ headerShown: false, gestureEnabled: false }}
         />
       </Stack.Protected>
 
-      <Stack.Protected guard={!!session && onboardingDone}>
+      <Stack.Protected guard={!!session}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="chat/[id]" options={{ headerBackTitle: "Chats" }} />
         <Stack.Screen name="kurs/[id]" options={{ headerBackTitle: "Kurse" }} />
@@ -57,9 +50,7 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <OnboardingProvider>
-        <RootNavigator />
-      </OnboardingProvider>
+      <RootNavigator />
     </AuthProvider>
   );
 }

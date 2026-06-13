@@ -3,6 +3,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -30,7 +31,8 @@ import {
   modulnamenFuerStudiengang,
   studiengaengeFuerUni,
 } from "../data/onboarding-katalog";
-import { useOnboarding } from "../lib/onboarding-context";
+import { authSync } from "../api/me";
+import { signUpWithPassword } from "../lib/supabase";
 
 // ─── Onboarding-Wizard (Mock-first) ───────────────────────────────────────────
 //
@@ -56,6 +58,10 @@ type Entwurf = {
   bio: string;
   frageAntworten: FrageAntwort[];
   bilder: (string | null)[];
+  // Login-Account, im letzten Schritt eingegeben
+  email: string;
+  passwort: string;
+  passwortWdh: string;
 };
 
 const LEER: Entwurf = {
@@ -70,6 +76,9 @@ const LEER: Entwurf = {
   bio: "",
   frageAntworten: [],
   bilder: Array(MAX_BILDER).fill(null),
+  email: "",
+  passwort: "",
+  passwortWdh: "",
 };
 
 async function bildAuswaehlen(): Promise<string | null> {
@@ -149,14 +158,27 @@ const SCHRITTE: Schritt[] = [
     ueberspringbar: false,
     fertig: (e) => e.bilder.slice(0, KP_BILDER).every((b) => !!b),
   },
+  {
+    // Letzter Schritt: hier entsteht der Account. Erst nach erfolgreichem
+    // signUp existiert eine Session → AuthGate wechselt zu den Tabs.
+    id: "account",
+    titel: "Erstelle dein Konto",
+    untertitel: "Mit E-Mail und Passwort meldest du dich künftig an.",
+    ueberspringbar: false,
+    fertig: (e) =>
+      /\S+@\S+\.\S+/.test(e.email.trim()) &&
+      e.passwort.length >= 6 &&
+      e.passwort === e.passwortWdh,
+  },
 ];
 
 export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { abschliessen: onboardingAbschliessen } = useOnboarding();
   const [index, setIndex] = useState(0);
   const [entwurf, setEntwurf] = useState<Entwurf>(LEER);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [laedt, setLaedt] = useState(false);
 
   const schritt = SCHRITTE[index];
   const istLetzter = index === SCHRITTE.length - 1;
@@ -180,24 +202,54 @@ export default function OnboardingScreen() {
   }
 
   async function abschliessen() {
-    // Onboarding-Daten ins selbe Format wie der Profil-Tab schreiben.
-    const profil = {
-      name: entwurf.name.trim(),
-      alter: entwurf.alter,
-      studiengang: entwurf.studiengangName,
-      uni: entwurf.uniName,
-      bilder: entwurf.bilder,
-      bio: entwurf.bio.trim(),
-      hobbies: entwurf.hobbies,
-      module: entwurf.module,
-      frageAntworten: entwurf.frageAntworten
-        .map((fa) => ({ ...fa, antwort: fa.antwort.trim() }))
-        .filter((fa) => fa.antwort.length > 0),
-    };
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profil));
-    // Flag setzen → RootNavigator-Guard wechselt automatisch zu den Tabs
-    // (kein manuelles Navigieren nötig, gleicher Mechanismus wie beim Login).
-    await onboardingAbschliessen();
+    if (laedt) return;
+    setFehler(null);
+    setLaedt(true);
+    try {
+      // Profil lokal speichern (Mock), BEVOR die Session entsteht — sonst
+      // zeigt der Profil-Tab beim automatischen Wechsel zu den Tabs kurz
+      // nichts. Selbes Format wie der Profil-Tab (profil_v2).
+      const profil = {
+        name: entwurf.name.trim(),
+        alter: entwurf.alter,
+        studiengang: entwurf.studiengangName,
+        uni: entwurf.uniName,
+        bilder: entwurf.bilder,
+        bio: entwurf.bio.trim(),
+        hobbies: entwurf.hobbies,
+        module: entwurf.module,
+        frageAntworten: entwurf.frageAntworten
+          .map((fa) => ({ ...fa, antwort: fa.antwort.trim() }))
+          .filter((fa) => fa.antwort.length > 0),
+      };
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profil));
+
+      // Account anlegen → Session entsteht → AuthGate wechselt zu den Tabs.
+      const session = await signUpWithPassword(entwurf.email.trim(), entwurf.passwort);
+      if (!session) {
+        // "Confirm email" aktiv (Production): noch keine Session. Profil
+        // bleibt lokal, der Nutzer bestätigt erst seine Mail.
+        Alert.alert(
+          "Fast geschafft",
+          "Wir haben dir eine Bestätigungs-E-Mail geschickt. Danach kannst du dich anmelden."
+        );
+        router.replace("/(auth)/login");
+        return;
+      }
+      // Profil im Backend anlegen (idempotent, Fehler non-blocking).
+      try {
+        await authSync(entwurf.name.trim());
+      } catch {
+        // Backend nicht erreichbar — Konto ist erstellt, Profil wird beim
+        // nächsten erfolgreichen Request gesynct.
+      }
+      // Session ist da → Guard rendert die Tabs, kein manuelles Navigieren.
+    } catch (e) {
+      setFehler(
+        e instanceof Error ? e.message : "Konto konnte nicht erstellt werden."
+      );
+      setLaedt(false);
+    }
   }
 
   return (
@@ -234,6 +286,7 @@ export default function OnboardingScreen() {
           {schritt.id === "bio" && <SchrittBio entwurf={entwurf} set={set} />}
           {schritt.id === "fragen" && <SchrittFragen entwurf={entwurf} set={set} />}
           {schritt.id === "fotos" && <SchrittFotos entwurf={entwurf} set={set} />}
+          {schritt.id === "account" && <SchrittAccount entwurf={entwurf} set={set} fehler={fehler} />}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -245,11 +298,15 @@ export default function OnboardingScreen() {
           </TouchableOpacity>
         )}
         <TouchableOpacity
-          style={[stile.weiterKnopf, !darfWeiter && stile.weiterKnopfInaktiv]}
+          style={[stile.weiterKnopf, (!darfWeiter || laedt) && stile.weiterKnopfInaktiv]}
           onPress={weiter}
-          disabled={!darfWeiter}
+          disabled={!darfWeiter || laedt}
         >
-          <Text style={stile.weiterText}>{istLetzter ? "Fertig" : "Weiter"}</Text>
+          {laedt ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={stile.weiterText}>{istLetzter ? "Konto erstellen" : "Weiter"}</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -589,6 +646,59 @@ function SchrittFotos({ entwurf, set }: { entwurf: Entwurf; set: (t: Partial<Ent
   );
 }
 
+// ─── Schritt 8: Konto (E-Mail + Passwort) ─────────────────────────────────────
+
+function SchrittAccount({
+  entwurf,
+  set,
+  fehler,
+}: {
+  entwurf: Entwurf;
+  set: (t: Partial<Entwurf>) => void;
+  fehler: string | null;
+}) {
+  return (
+    <View style={stile.feldGruppe}>
+      <Text style={stile.feldLabel}>E-Mail</Text>
+      <TextInput
+        style={stile.textFeld}
+        value={entwurf.email}
+        onChangeText={(t) => set({ email: t })}
+        placeholder="deine@email.de"
+        placeholderTextColor="#aaa"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        textContentType="emailAddress"
+      />
+
+      <Text style={[stile.feldLabel, { marginTop: 20 }]}>Passwort</Text>
+      <TextInput
+        style={stile.textFeld}
+        value={entwurf.passwort}
+        onChangeText={(t) => set({ passwort: t })}
+        placeholder="Mindestens 6 Zeichen"
+        placeholderTextColor="#aaa"
+        secureTextEntry
+        textContentType="newPassword"
+      />
+
+      <Text style={[stile.feldLabel, { marginTop: 20 }]}>Passwort wiederholen</Text>
+      <TextInput
+        style={stile.textFeld}
+        value={entwurf.passwortWdh}
+        onChangeText={(t) => set({ passwortWdh: t })}
+        placeholder="Passwort erneut eingeben"
+        placeholderTextColor="#aaa"
+        secureTextEntry
+        textContentType="newPassword"
+      />
+
+      {fehler && <Text style={stile.fehlerText}>{fehler}</Text>}
+    </View>
+  );
+}
+
 // ─── Wiederverwendbare Chips ──────────────────────────────────────────────────
 
 function GewaehltChip({ text, onEntfernen }: { text: string; onEntfernen: () => void }) {
@@ -725,6 +835,7 @@ const stile = StyleSheet.create({
     lineHeight: 22,
   },
   zeichenZaehler: { fontSize: 12, color: "#aaa", textAlign: "right", marginTop: 6 },
+  fehlerText: { color: "#FF3B30", fontSize: 14, marginTop: 16 },
 
   // Fragen
   frageKarte: { backgroundColor: "#F2F2F7", borderRadius: 14, padding: 14, marginBottom: 12 },

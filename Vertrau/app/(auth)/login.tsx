@@ -99,8 +99,8 @@ export default function LoginScreen() {
 
         <View style={stile.wechselZeile}>
           <Text style={stile.wechselText}>Noch kein Konto?</Text>
-          <Link href="/(auth)/registrieren" style={stile.wechselLink}>
-            Registrieren
+          <Link href="/onboarding" style={stile.wechselLink}>
+            Konto erstellen
           </Link>
         </View>
       </ScrollView>
