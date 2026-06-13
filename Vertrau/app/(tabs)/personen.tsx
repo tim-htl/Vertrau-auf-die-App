@@ -147,12 +147,6 @@ export function PersonenKarte({
 }
 
 // ─── Swipe-Karte (Tinder-Mechanik, nur Rechts-Swipe = Like) ───────────────────
-//
-// Die Karte folgt dem Finger nach rechts (leichte Rotation + "FREUNDE?"-
-// Badge), ab der Schwelle fliegt sie raus und löst das Like aus. Links
-// gibt es nur Widerstand (kein Pass — bewusste Entscheidung). Vertikales
-// Blättern der FlatList bleibt unberührt: der PanResponder greift nur,
-// wenn die Bewegung klar horizontal ist.
 
 function SwipeKarte({
   person,
@@ -167,16 +161,11 @@ function SwipeKarte({
   hoehe: number;
   onLike: () => void;
   onOeffnen: () => void;
-  // Meldet, ob gerade horizontal gezogen wird — die FlatList schaltet
-  // dann ihr vertikales Scrollen ab, damit leichtes vertikales
-  // Verrutschen den Swipe nicht abbricht.
   onPanAktiv?: (aktiv: boolean) => void;
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
   const schwelle = breite * 0.35;
 
-  // PanResponder wird einmal erzeugt — Callbacks per Ref aktuell halten,
-  // damit keine veraltete Closure feuert.
   const onLikeRef = useRef(onLike);
   onLikeRef.current = onLike;
   const onPanAktivRef = useRef(onPanAktiv);
@@ -194,12 +183,8 @@ function SwipeKarte({
       onMoveShouldSetPanResponder: (_e, g) =>
         Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
       onPanResponderGrant: () => onPanAktivRef.current?.(true),
-      // Einmal beansprucht, wird die Geste NICHT mehr an die Liste
-      // abgegeben — sonst klaut deren Scroll den Swipe bei vertikalem
-      // Verrutschen.
       onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_e, g) => {
-        // nach links nur mit starkem Widerstand (kein Pass)
         translateX.setValue(g.dx > 0 ? g.dx : g.dx / 5);
       },
       onPanResponderRelease: (_e, g) => {
@@ -226,8 +211,6 @@ function SwipeKarte({
     outputRange: ["-6deg", "0deg", "6deg"],
   });
 
-  // "Aufladung": 0 → 1, voll geladen an der Auslöse-Schwelle. Steuert
-  // Sichtbarkeit und Größe des Kreises in der links freiwerdenden Fläche.
   const ladung = translateX.interpolate({
     inputRange: [0, schwelle],
     outputRange: [0, 1],
@@ -241,8 +224,6 @@ function SwipeKarte({
 
   return (
     <View style={{ width: breite, height: hoehe }}>
-      {/* Lade-Anzeige HINTER der Karte — wird sichtbar, wo die Karte
-          beim Ziehen nach rechts Fläche freigibt */}
       <Animated.View
         style={[styles.ladeFlaeche, { height: hoehe, opacity: ladung }]}
         pointerEvents="none"
@@ -252,8 +233,6 @@ function SwipeKarte({
         </Animated.View>
       </Animated.View>
 
-      {/* Weißer Hintergrund auf der Karte, damit sie die Lade-Anzeige
-          verdeckt, solange sie nicht verschoben ist */}
       <Animated.View
         {...panResponder.panHandlers}
         style={{ backgroundColor: "#fff", transform: [{ translateX }, { rotate: rotation }] }}
@@ -272,21 +251,16 @@ export default function PersonenScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const TAB_BAR = 49;
+  
+  // Safe Areas for Header and Pill Navigation
+  const OBERE_LEISTE = insets.top + 44; 
+  const UNTERE_LEISTE = 100; // Safe space for the floating pill bar (24 margin + 65 height + 11 padding)
+  const karteHoehe = height - OBERE_LEISTE - UNTERE_LEISTE;
 
-  // Exakter sichtbarer Bereich pro Profil – KEIN top padding oben (sonst
-  // verschiebt sich der Abstand beim Swipen zwischen Profilen).
-  const karteHoehe = height - insets.top - TAB_BAR - insets.bottom;
-
-  // Feed = Demo-Personen minus bereits gelikte (persistiert)
   const [feed, setFeed] = useState<Person[] | null>(null);
-
-  // false, solange eine Karte horizontal gezogen wird — verhindert,
-  // dass vertikales Verrutschen den Swipe abbricht
   const [listeScrollbar, setListeScrollbar] = useState(true);
-
-  // Match-Banner ("dezenter Hinweis" statt Vollbild-Overlay)
   const [matchInfo, setMatchInfo] = useState<{ name: string; chatId: string } | null>(null);
+  
   const bannerY = useRef(new Animated.Value(-120)).current;
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -313,7 +287,6 @@ export default function PersonenScreen() {
   }
 
   async function personGeliked(person: Person) {
-    // Karte sofort aus dem Feed nehmen, dann Like verarbeiten
     setFeed((f) => (f ? f.filter((p) => p.id !== person.id) : f));
     const ergebnis = await likePerson(person);
     if (ergebnis.match && ergebnis.chatId) {
@@ -332,7 +305,7 @@ export default function PersonenScreen() {
 
   if (feed.length === 0) {
     return (
-      <View style={[styles.hintergrund, styles.leerContainer, { paddingTop: insets.top }]}>
+      <View style={[styles.hintergrund, styles.leerContainer, { paddingTop: OBERE_LEISTE }]}>
         <Ionicons name="people-outline" size={48} color="#C7C7CC" />
         <Text style={styles.leerTitel}>Keine weiteren Profile</Text>
         <Text style={styles.leerText}>Du hast alle Profile durchgeswiped.</Text>
@@ -344,7 +317,7 @@ export default function PersonenScreen() {
   }
 
   return (
-    <View style={[styles.hintergrund, { paddingTop: insets.top }]}>
+    <View style={[styles.hintergrund, { paddingTop: OBERE_LEISTE }]}>
       <FlatList
         data={feed}
         keyExtractor={(item) => item.id}
@@ -376,7 +349,7 @@ export default function PersonenScreen() {
         <Animated.View
           style={[
             styles.matchBanner,
-            { top: insets.top + 8, transform: [{ translateY: bannerY }] },
+            { top: 8, transform: [{ translateY: bannerY }] },
           ]}
         >
           <TouchableOpacity
@@ -409,8 +382,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
-
-  // Lade-Anzeige hinter der Swipe-Karte (links freiwerdende Fläche)
   ladeFlaeche: {
     position: "absolute",
     left: 0,
@@ -427,8 +398,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
-  // Match-Banner
   matchBanner: {
     position: "absolute",
     left: 16,
@@ -458,8 +427,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 1,
   },
-
-  // Leerer Feed
   leerContainer: {
     alignItems: "center",
     justifyContent: "center",
@@ -489,33 +456,25 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
-
   karte: {
     justifyContent: "flex-start",
     paddingTop: 16,
   },
-
   zeile: {
     flexDirection: "row",
     flex: 1,
     paddingBottom: 16,
   },
-
-  // Rechte Spalte: alle Felder linksbündig, fester Abstand (3 Zeilen ≈ 45px)
   infoSpalte: {
     flex: 1,
     paddingTop: 4,
   },
-
-  // Bild-Platzhalter (Apple-Kontakte-Stil)
   bildPlatzhalter: {
     backgroundColor: "#C7C7CC",
     justifyContent: "flex-end",
     alignItems: "center",
     overflow: "hidden",
   },
-
-  // Infos rechts
   nameText: {
     fontSize: 26,
     fontWeight: "700",
@@ -537,9 +496,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#e5e5ea",
     marginVertical: 10,
   },
-
   infoZeile: {
-    marginBottom: 45, // ~3 Zeilen Abstand (lineHeight 15 × 3)
+    marginBottom: 45,
   },
   infoLabel: {
     fontSize: 11,
@@ -554,7 +512,6 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
     lineHeight: 19,
   },
-
   tagReihe: {
     flexDirection: "row",
     flexWrap: "wrap",

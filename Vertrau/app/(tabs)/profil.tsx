@@ -28,25 +28,16 @@ import {
 import { HOBBY_KATALOG, hobbyIcon } from "../../data/hobbies";
 import { alleModule, DEMO_STUDIENGANG } from "../../data/kurse";
 
-// Modul-Namen aus der Moduldatenbank des Studiengangs (dedupliziert) —
-// Module werden daraus gewählt, nicht mehr frei eingetippt.
 const MODUL_KATALOG = [...new Set(alleModule(DEMO_STUDIENGANG.moduldatenbank).map((m) => m.name))];
 
-// ─── Typen & Standardwerte ────────────────────────────────────────────────────
-
-// 10 Bild-Slots: die ersten 5 erscheinen auch auf der Profilkarte (KP),
-// alle 10 in der ausführlichen Ansicht (AP) — ein gemeinsames Array,
-// keine getrennten Listen.
 const MAX_BILDER = 10;
 const KP_BILDER = 5;
 
 type ProfilData = {
-  // Nicht bearbeitbar
   name: string;
   alter: string;
   studiengang: string;
   uni: string;
-  // Bearbeitbar
   bilder: (string | null)[];
   bio: string;
   hobbies: string[];
@@ -67,8 +58,6 @@ const DEFAULT_PROFIL: ProfilData = {
 };
 
 const STORAGE_KEY = "profil_v2";
-
-// ─── Hilfsfunktion: Bild auswählen ───────────────────────────────────────────
 
 async function bildAuswaehlen(): Promise<string | null> {
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -92,10 +81,9 @@ function ProfilAnsicht({ profil }: { profil: ProfilData }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   
-  // ANGEPASST: 100 statt 49, damit die Ansicht über der schwebenden Pill-Bar endet
+  const OBERE_LEISTE = insets.top + 44;
   const TAB_BAR = 100; 
-  const HEADER = 44;
-  const verfuegbar = height - insets.top - HEADER - TAB_BAR - insets.bottom;
+  const verfuegbar = height - OBERE_LEISTE - TAB_BAR;
 
   const seitenPadding = 16;
   const spaltenGap = 14;
@@ -112,8 +100,6 @@ function ProfilAnsicht({ profil }: { profil: ProfilData }) {
   return (
     <View style={[stile.karte, { width, height: verfuegbar }]}>
       <View style={[stile.zeile, { paddingHorizontal: seitenPadding, gap: spaltenGap }]}>
-
-        {/* Linke Spalte: Fotostreifen */}
         <View style={{ width: bildSpalteBreite, gap: bildAbstand, alignItems: "center" }}>
           {profil.bilder.slice(0, anzahlBilder).map((bild, i) =>
             bild ? (
@@ -135,7 +121,6 @@ function ProfilAnsicht({ profil }: { profil: ProfilData }) {
           )}
         </View>
 
-        {/* Rechte Spalte: Infos */}
         <View style={[stile.infoSpalte, { width: infoSpalteBreite }]}>
           <Text style={stile.nameText} numberOfLines={1}>{profil.name}</Text>
           <Text style={stile.alterText}>{profil.alter} Jahre</Text>
@@ -199,9 +184,7 @@ function ProfilBearbeiten({
   profil: ProfilData;
   onChange: (p: ProfilData) => void;
 }) {
-  // Entwurf als lokaler State: der Parent re-rendert während des Bearbeitens
-  // nicht (Änderungen landen dort nur in einer Ref) — ohne eigenen State
-  // würden Tag-/Bild-/Fragen-Änderungen erst nach dem Speichern sichtbar.
+  const insets = useSafeAreaInsets();
   const [profil, setProfil] = useState(startProfil);
   const [frageAuswahlOffen, setFrageAuswahlOffen] = useState(false);
   const [hobbyAuswahlOffen, setHobbyAuswahlOffen] = useState(false);
@@ -245,7 +228,6 @@ function ProfilBearbeiten({
     onChange({ ...profil, module: profil.module.filter((_, idx) => idx !== i) });
   }
 
-  // Auswahl-Listen: noch nicht gewählte Einträge, optional per Suche gefiltert
   const verfuegbareHobbies = HOBBY_KATALOG.filter(
     (h) =>
       !profil.hobbies.includes(h.name) &&
@@ -282,7 +264,6 @@ function ProfilBearbeiten({
     });
   }
 
-  // Reihenfolge ändern: Antwort um eine Position nach oben/unten schieben.
   function frageVerschieben(index: number, delta: -1 | 1) {
     const ziel = index + delta;
     if (ziel < 0 || ziel >= profil.frageAntworten.length) return;
@@ -300,11 +281,10 @@ function ProfilBearbeiten({
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* ANGEPASST: paddingBottom 120 statt 40, damit unter dem Formular Platz für die schwebende Bar ist */}
-      <ScrollView style={stile.editContainer} contentContainerStyle={{ paddingBottom: 120 }}>
-
-        {/* Bilder: 2 Reihen à 5 Slots. Reihe 1 (= bilder[0..4]) erscheint
-            auch auf der Profilkarte, alle 10 in der ausführlichen Ansicht. */}
+      <ScrollView 
+        style={stile.editContainer} 
+        contentContainerStyle={{ paddingTop: insets.top + 44, paddingBottom: 120 }}
+      >
         <Text style={stile.editSektionTitel}>Bilder</Text>
         {[profil.bilder.slice(0, KP_BILDER), profil.bilder.slice(KP_BILDER, MAX_BILDER)].map(
           (reihe, r) => (
@@ -340,7 +320,6 @@ function ProfilBearbeiten({
           Tippen zum Ändern · Halten zum Entfernen · Reihe 1 erscheint auf deiner Karte
         </Text>
 
-        {/* Bio */}
         <Text style={stile.editSektionTitel}>Bio</Text>
         <View style={stile.editSektion}>
           <TextInput
@@ -355,7 +334,6 @@ function ProfilBearbeiten({
           <Text style={stile.zeichenZaehler}>{profil.bio.length}/200</Text>
         </View>
 
-        {/* Profil-Fragen: bis zu 5 aus dem Katalog wählen und beantworten */}
         <Text style={stile.editSektionTitel}>
           Fragen über dich ({profil.frageAntworten.length}/{MAX_FRAGEN})
         </Text>
@@ -430,7 +408,6 @@ function ProfilBearbeiten({
             ))}
         </View>
 
-        {/* Hobbies: Auswahl aus dem Katalog (mit Icons), kein Freitext */}
         <Text style={stile.editSektionTitel}>Hobbies</Text>
         <View style={stile.editSektion}>
           {profil.hobbies.length > 0 && (
@@ -490,7 +467,6 @@ function ProfilBearbeiten({
           )}
         </View>
 
-        {/* Module: Auswahl aus der Moduldatenbank des Studiengangs */}
         <Text style={stile.editSektionTitel}>Module</Text>
         <View style={stile.editSektion}>
           {profil.module.length > 0 && (
@@ -548,7 +524,6 @@ function ProfilBearbeiten({
           )}
         </View>
 
-        {/* Nicht bearbeitbare Felder (Info) */}
         <Text style={stile.editSektionTitel}>Nicht änderbar</Text>
         <View style={stile.editSektion}>
           {[
@@ -577,17 +552,14 @@ export default function ProfilScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  
   const [profil, setProfil] = useState<ProfilData>(DEFAULT_PROFIL);
   const [editModus, setEditModus] = useState(false);
   const [seite, setSeite] = useState(0);
-  // false, solange der Finger auf dem Bilder-Carousel der AP liegt —
-  // sonst frisst der Pager dessen horizontale Swipes (Gesten-Konflikt
-  // zweier verschachtelter horizontaler ScrollViews).
   const [pagerAktiv, setPagerAktiv] = useState(true);
   const editProfilRef = useRef<ProfilData>(profil);
 
-  // Profil laden. Ältere gespeicherte Profile haben nur 5 Bild-Slots und
-  // keine frageAntworten — beim Laden aufs neue Format auffüllen.
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((data) => {
       if (data) {
@@ -606,10 +578,8 @@ export default function ProfilScreen() {
     });
   }, []);
 
-  // Header-Button dynamisch setzen
   useLayoutEffect(() => {
     navigation.setOptions({
-      // Demo-Einstieg zum Onboarding-Wizard (nur auf dem Designer-Branch).
       headerLeft: () => (
         <TouchableOpacity
           onPress={() => router.push("/onboarding")}
@@ -622,7 +592,6 @@ export default function ProfilScreen() {
         <TouchableOpacity
           onPress={async () => {
             if (editModus) {
-              // Speichern — Fragen ohne geschriebene Antwort fliegen raus
               const bereinigt: ProfilData = {
                 ...editProfilRef.current,
                 frageAntworten: editProfilRef.current.frageAntworten
@@ -660,10 +629,8 @@ export default function ProfilScreen() {
     );
   }
 
-  // Pager: Seite 1 = Profilkarte (KP), Seite 2 = ausführliche Ansicht (AP) —
-  // horizontal rüberswipen, der Stift-Button oben bearbeitet beides.
   return (
-    <View style={{ flex: 1, backgroundColor: "#fff" }}>
+    <View style={{ flex: 1, backgroundColor: "#fff", paddingTop: insets.top + 44 }}>
       <ScrollView
         horizontal
         pagingEnabled
@@ -709,7 +676,6 @@ export default function ProfilScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const stile = StyleSheet.create({
-  // Profil-Ansicht (wie PersonenKarte)
   karte: {
     backgroundColor: "#fff",
     justifyContent: "flex-start",
@@ -782,7 +748,6 @@ const stile = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // Bearbeitungs-Modus
   editContainer: {
     flex: 1,
     backgroundColor: "#F2F2F7",
@@ -806,7 +771,6 @@ const stile = StyleSheet.create({
     paddingVertical: 12,
   },
 
-  // Bilder
   bildReihe: {
     flexDirection: "row",
     paddingHorizontal: 16,
@@ -847,7 +811,6 @@ const stile = StyleSheet.create({
     marginBottom: 2,
   },
 
-  // Bio
   bioInput: {
     fontSize: 15,
     color: "#1a1a1a",
@@ -862,7 +825,6 @@ const stile = StyleSheet.create({
     marginTop: 4,
   },
 
-  // Profil-Fragen (Edit-Modus)
   frageKarte: {
     backgroundColor: "#F2F2F7",
     borderRadius: 12,
@@ -917,7 +879,6 @@ const stile = StyleSheet.create({
     lineHeight: 19,
   },
 
-  // Katalog-Auswahl (Hobbies/Module)
   sucheInput: {
     backgroundColor: "#F2F2F7",
     borderRadius: 10,
@@ -943,10 +904,9 @@ const stile = StyleSheet.create({
     paddingVertical: 4,
   },
 
-  // KP↔AP-Pager
   pagerDots: {
     position: "absolute",
-    bottom: 100, // ANGEPASST: Hovert nun über dem Pill-Bar-Bereich
+    bottom: 100, 
     alignSelf: "center",
     flexDirection: "row",
     gap: 6,
@@ -961,7 +921,6 @@ const stile = StyleSheet.create({
     backgroundColor: "#007AFF",
   },
 
-  // Tag-Bearbeitung
   tagReiheEdit: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -995,7 +954,6 @@ const stile = StyleSheet.create({
     padding: 4,
   },
 
-  // Nicht bearbeitbare Felder
   readonlyZeile: {
     flexDirection: "row",
     justifyContent: "space-between",

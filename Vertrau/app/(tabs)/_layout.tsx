@@ -11,6 +11,12 @@ export default function TabLayout() {
         tabBarInactiveTintColor: "#8E8E93",
         tabBarShowLabel: false,
         
+        // Center the icons vertically and horizontally inside the pill
+        tabBarItemStyle: {
+          justifyContent: "center",
+          alignItems: "center",
+        },
+
         // 1. The Pill-Shaped Bottom Bar Styling
         tabBarStyle: {
           position: "absolute",
@@ -47,7 +53,6 @@ export default function TabLayout() {
         name="personen"
         options={{
           title: "Personen",
-          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="people-outline" size={size} color={color} />
           ),
@@ -57,7 +62,6 @@ export default function TabLayout() {
         name="treffen"
         options={{
           title: "Treffen",
-          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-outline" size={size} color={color} />
           ),

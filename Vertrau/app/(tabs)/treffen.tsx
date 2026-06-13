@@ -46,12 +46,10 @@ function ProfilPlatzhalter({ size }: { size: number }) {
 export function AktivitaetKarte({
   item,
   verfuegbareHoehe,
-  topInset,
   onPress,
 }: {
   item: Aktivitaet;
   verfuegbareHoehe: number;
-  topInset: number;
   onPress?: () => void;
 }) {
   const { width } = useWindowDimensions();
@@ -82,11 +80,11 @@ export function AktivitaetKarte({
           resizeMode="cover"
         />
 
-        {/* Profilbilder – mit Abstand zur Statusleiste */}
+        {/* Profilbilder */}
         <View
           style={[
             styles.teilnehmerReihe,
-            { gap: luecke, paddingHorizontal: seitenAbstand, paddingTop: topInset + 12 },
+            { gap: luecke, paddingHorizontal: seitenAbstand, paddingTop: 16 },
           ]}
         >
           {item.teilnehmer.slice(0, 4).map((t) =>
@@ -161,13 +159,13 @@ export default function TreffenScreen() {
     ...DEMO_AKTIVITAETEN,
   ];
 
-  const TAB_BAR_HOEHE = 49;
-  // Verfügbare Höhe: Bildschirm minus Tab-Bar und unterer Safe-Area-Bereich.
-  // Kein Abzug für insets.top – das Bild läuft bewusst bis ganz oben (wie Instagram).
-  const verfuegbareHoehe = height - TAB_BAR_HOEHE - insets.bottom;
+  // Safe Areas for Header and Pill Navigation
+  const OBERE_LEISTE = insets.top + 44; 
+  const UNTERE_LEISTE = 100; // Safe space for the floating pill bar (24 margin + 65 height + 11 padding)
+  const verfuegbareHoehe = height - OBERE_LEISTE - UNTERE_LEISTE;
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: "#fff", paddingTop: OBERE_LEISTE }}>
       <FlatList
         data={alleAktivitaeten}
         keyExtractor={(item) => item.id}
@@ -175,7 +173,6 @@ export default function TreffenScreen() {
           <AktivitaetKarte
             item={item}
             verfuegbareHoehe={verfuegbareHoehe}
-            topInset={insets.top}
             onPress={() =>
               router.push({
                 pathname: "/aktivitaet/[id]",
@@ -197,7 +194,7 @@ export default function TreffenScreen() {
 
       {/* Floating Action Button: Treffen erstellen (über Standort-Auswahl) */}
       <TouchableOpacity
-        style={[styles.fab, { bottom: insets.bottom + 16 }]}
+        style={[styles.fab, { bottom: UNTERE_LEISTE + 16 }]}
         onPress={() => router.push("/aktivitaet/standort-waehlen")}
         activeOpacity={0.85}
       >

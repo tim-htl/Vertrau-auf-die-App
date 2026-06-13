@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DEMO_STUDIENGANG } from "../../data/kurse";
 
 // ─── Uni-Logo (Bild oder Initialen-Platzhalter) ──────────────────────────────
@@ -61,10 +62,14 @@ function ListenZeile({
 
 export default function KurseScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const studiengang = DEMO_STUDIENGANG;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.inhalt}>
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={[styles.inhalt, { paddingTop: insets.top + 44, paddingBottom: 110 }]}
+    >
       {/* Kopfbereich: Logo + Studiengangs-Name */}
       <View style={styles.kopf}>
         <UniLogo uri={studiengang.uniLogo} text={studiengang.uni} />
@@ -125,7 +130,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F2F2F7",
   },
   inhalt: {
-    paddingBottom: 32,
+    // Dynamic padding applies via inline styles to handle safe areas
   },
 
   // Kopfbereich
