@@ -16,8 +16,6 @@ import { INITIAL_CHATS, type ChatItem, type Message } from "../../data/chats";
 import { ladeJoinedAktivitaeten } from "../../data/joined";
 import { ladeUserChats } from "../../data/userAktivitaeten";
 
-// ─── Hilfsfunktion: Nachrichten laden ────────────────────────────────────────
-
 async function ladeNachrichten(
   chatId: string,
   initialFallback: Message[]
@@ -28,8 +26,6 @@ async function ladeNachrichten(
   await AsyncStorage.setItem(key, JSON.stringify(initialFallback));
   return initialFallback;
 }
-
-// ─── Einzelnes Chat-Listen-Element ───────────────────────────────────────────
 
 function ChatListItem({
   chat,
@@ -42,7 +38,6 @@ function ChatListItem({
 }) {
   return (
     <TouchableOpacity style={styles.item} onPress={onPress} activeOpacity={0.7}>
-      {/* Profilbild / Aktivitätsbild */}
       {chat.image ? (
         <Image source={{ uri: chat.image }} style={styles.avatar} />
       ) : (
@@ -51,7 +46,6 @@ function ChatListItem({
         </View>
       )}
 
-      {/* Name + letzte Nachricht */}
       <View style={styles.textBereich}>
         <Text style={styles.name} numberOfLines={1}>
           {chat.name}
@@ -64,13 +58,9 @@ function ChatListItem({
   );
 }
 
-// ─── Trennlinie ───────────────────────────────────────────────────────────────
-
 function Trennlinie() {
   return <View style={styles.trennlinie} />;
 }
-
-// ─── Haupt-Screen ─────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -80,8 +70,6 @@ export default function ChatScreen() {
   >({});
   const [sichtbareChats, setSichtbareChats] = useState<ChatItem[]>([]);
 
-  // Beim Fokus immer neueste letzte Nachricht laden und Aktivitätschats
-  // nach beigetretenen Aktivitäten filtern.
   useFocusEffect(
     useCallback(() => {
       async function laden() {
@@ -129,8 +117,6 @@ export default function ChatScreen() {
     </View>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {

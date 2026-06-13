@@ -11,18 +11,43 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DEMO_STUDIENGANG } from "../../data/kurse";
 
-// ─── Uni-Logo (Bild oder Initialen-Platzhalter) ──────────────────────────────
+const BG = "#E9EEF5";
+
+// ─────────────────────────────────────────────────────────────
+// Neumorphism Shadows
+// ─────────────────────────────────────────────────────────────
+
+const shadowLight = {
+  shadowColor: "#FFFFFF",
+  shadowOffset: { width: -6, height: -6 },
+  shadowOpacity: 0.9,
+  shadowRadius: 8,
+};
+
+const shadowDark = {
+  elevation: 6,
+  shadowColor: "#AAB4C3",
+  shadowOffset: { width: 6, height: 6 },
+  shadowOpacity: 0.35,
+  shadowRadius: 8,
+};
+
+// ─────────────────────────────────────────────────────────────
+// Uni Logo
+// ─────────────────────────────────────────────────────────────
 
 function UniLogo({ uri, text }: { uri: string | null; text: string }) {
   if (uri) {
     return <Image source={{ uri }} style={styles.uniLogo} />;
   }
+
   const initialen = text
     .split(" ")
     .map((w) => w[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
   return (
     <View style={[styles.uniLogo, styles.uniLogoPlatzhalter]}>
       <Text style={styles.uniLogoText}>{initialen}</Text>
@@ -30,35 +55,40 @@ function UniLogo({ uri, text }: { uri: string | null; text: string }) {
   );
 }
 
-// ─── Einzelne Listen-Zeile (iOS-Stil) ────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Neumorphic List Row
+// ─────────────────────────────────────────────────────────────
 
 function ListenZeile({
   titel,
   untertitel,
   onPress,
-  letzte,
 }: {
   titel: string;
   untertitel?: string;
   onPress: () => void;
-  letzte?: boolean;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.zeile, !letzte && styles.zeileTrenner]}
+      style={styles.zeile}
       onPress={onPress}
-      activeOpacity={0.5}
+      activeOpacity={0.8}
     >
       <View style={styles.zeileText}>
         <Text style={styles.zeileTitel}>{titel}</Text>
-        {untertitel && <Text style={styles.zeileUntertitel}>{untertitel}</Text>}
+        {untertitel && (
+          <Text style={styles.zeileUntertitel}>{untertitel}</Text>
+        )}
       </View>
-      <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />
+
+      <Ionicons name="chevron-forward" size={18} color="#9AA6B8" />
     </TouchableOpacity>
   );
 }
 
-// ─── Haupt-Screen ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Screen
+// ─────────────────────────────────────────────────────────────
 
 export default function KurseScreen() {
   const router = useRouter();
@@ -66,43 +96,57 @@ export default function KurseScreen() {
   const studiengang = DEMO_STUDIENGANG;
 
   return (
-    <ScrollView 
-      style={styles.container} 
-      contentContainerStyle={[styles.inhalt, { paddingTop: insets.top + 44, paddingBottom: 110 }]}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.inhalt,
+        {
+          paddingTop: insets.top + 24,
+          paddingBottom: 120,
+        },
+      ]}
+      showsVerticalScrollIndicator={false}
     >
-      {/* Kopfbereich: Logo + Studiengangs-Name */}
+      {/* Header Card */}
       <View style={styles.kopf}>
         <UniLogo uri={studiengang.uniLogo} text={studiengang.uni} />
+
         <View style={styles.kopfText}>
           <Text style={styles.studiengangName} numberOfLines={2}>
             {studiengang.name}
           </Text>
+
           <Text style={styles.uniName}>{studiengang.uni}</Text>
         </View>
       </View>
 
       {/* Meine Kurse */}
       <Text style={styles.sektionTitel}>Meine Kurse</Text>
+
       <View style={styles.sektion}>
-        {studiengang.meineKurse.map((kurs, i) => (
+        {studiengang.meineKurse.map((kurs) => (
           <ListenZeile
             key={kurs.id}
             titel={kurs.name}
             untertitel={
               kurs.ects
-                ? `${kurs.ects} ECTS${kurs.teilnehmer ? ` · ${kurs.teilnehmer.length} Teilnehmer` : ""}`
+                ? `${kurs.ects} ECTS${
+                    kurs.teilnehmer
+                      ? ` · ${kurs.teilnehmer.length} Teilnehmer`
+                      : ""
+                  }`
                 : undefined
             }
             onPress={() => router.push(`/kurs/${kurs.id}`)}
-            letzte={i === studiengang.meineKurse.length - 1}
           />
         ))}
       </View>
 
       {/* Moduldatenbank */}
       <Text style={styles.sektionTitel}>Moduldatenbank</Text>
+
       <View style={styles.sektion}>
-        {studiengang.moduldatenbank.map((bereich, i) => (
+        {studiengang.moduldatenbank.map((bereich) => (
           <ListenZeile
             key={bereich.id}
             titel={bereich.name}
@@ -114,7 +158,6 @@ export default function KurseScreen() {
                 : undefined
             }
             onPress={() => router.push(`/bereich/${bereich.id}`)}
-            letzte={i === studiengang.moduldatenbank.length - 1}
           />
         ))}
       </View>
@@ -122,104 +165,116 @@ export default function KurseScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F2F2F7",
-  },
-  inhalt: {
-    // Dynamic padding applies via inline styles to handle safe areas
+    backgroundColor: BG,
   },
 
-  // Kopfbereich
+  inhalt: {
+    paddingHorizontal: 20,
+  },
+
   kopf: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 22,
-    gap: 14,
-    backgroundColor: "#fff",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#d1d1d6",
+    padding: 20,
+    gap: 16,
+    borderRadius: 30,
+    backgroundColor: BG,
+    marginBottom: 28,
+
+    ...shadowLight,
+    ...shadowDark,
   },
+
   uniLogo: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: BG,
+
+    ...shadowLight,
+    ...shadowDark,
   },
+
   uniLogoPlatzhalter: {
-    backgroundColor: "#3062ac",
     justifyContent: "center",
     alignItems: "center",
   },
+
   uniLogoText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: 0.3,
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#3062AC",
   },
+
   kopfText: {
     flex: 1,
   },
+
   studiengangName: {
     fontSize: 22,
-    fontWeight: "700",
-    color: "#1a1a1a",
-    letterSpacing: -0.3,
+    fontWeight: "800",
+    color: "#243247",
+    letterSpacing: -0.4,
   },
+
   uniName: {
+    marginTop: 4,
     fontSize: 13,
-    color: "#8E8E93",
-    marginTop: 2,
-    fontWeight: "500",
+    fontWeight: "600",
+    color: "#7D8794",
   },
 
-  // Sektion (iOS grouped list)
   sektionTitel: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#6D6D72",
+    marginLeft: 4,
+    marginBottom: 12,
+    marginTop: 8,
+
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#7D8794",
+
     textTransform: "uppercase",
-    letterSpacing: 0.4,
-    marginTop: 26,
-    marginBottom: 7,
-    marginHorizontal: 20,
-  },
-  sektion: {
-    backgroundColor: "#fff",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: "#d1d1d6",
+    letterSpacing: 1,
   },
 
-  // Listen-Zeile
+  sektion: {
+    borderRadius: 28,
+    backgroundColor: BG,
+    paddingVertical: 8,
+    marginBottom: 28,
+
+    ...shadowLight,
+    ...shadowDark,
+  },
+
   zeile: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-    backgroundColor: "#fff",
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
-  zeileTrenner: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#d1d1d6",
-    marginLeft: 16,
-    paddingLeft: 0,
-  },
+
   zeileText: {
     flex: 1,
   },
+
   zeileTitel: {
     fontSize: 16,
-    color: "#1a1a1a",
-    fontWeight: "500",
+    fontWeight: "700",
+    color: "#243247",
   },
+
   zeileUntertitel: {
+    marginTop: 4,
     fontSize: 13,
-    color: "#8E8E93",
-    marginTop: 2,
+    fontWeight: "500",
+    color: "#8792A2",
   },
 });

@@ -4,9 +4,9 @@ import { useCallback, useState } from "react";
 import {
   FlatList,
   Image,
+  Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -14,29 +14,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DEMO_AKTIVITAETEN, type Aktivitaet } from "../../data/aktivitaeten";
 import { ladeUserAktivitaeten } from "../../data/userAktivitaeten";
 
-// ─── Profilbild-Platzhalter (Apple-Stil) ──────────────────────────────────────
+// ─── Profilbild-Platzhalter ──────────────────────────────────────────────────
 
-function ProfilPlatzhalter({ size }: { size: number }) {
+function MiniAvatar({ bild }: { bild?: string }) {
   return (
-    <View
-      style={[
-        styles.profilRahmen,
-        { width: size, height: size, borderRadius: size / 2 },
-      ]}
-    >
-      <View
-        style={[
-          styles.profilGrau,
-          { width: size, height: size, borderRadius: size / 2 },
-        ]}
-      >
-        <Ionicons
-          name="person"
-          size={size * 0.55}
-          color="#fff"
-          style={{ marginTop: size * 0.1 }}
-        />
-      </View>
+    <View style={styles.avatarBubble}>
+      {bild ? (
+        <Image source={{ uri: bild }} style={styles.avatarImage} />
+      ) : (
+        <Ionicons name="person" size={17} color="#111" />
+      )}
     </View>
   );
 }
@@ -53,83 +40,83 @@ export function AktivitaetKarte({
   onPress?: () => void;
 }) {
   const { width } = useWindowDimensions();
-  const bildHoehe = verfuegbareHoehe * 0.75;
-  const infoHoehe = verfuegbareHoehe * 0.25;
 
-  // Profilbilder: gleichmäßig zentriert berechnen
-  const maxTeilnehmer = Math.min(item.teilnehmer.length, 4);
-  const seitenAbstand = 24;
-  const luecke = 14;
-  const profilGroesse = Math.min(
-    (width - seitenAbstand * 2 - luecke * (maxTeilnehmer - 1)) / maxTeilnehmer,
-    72
-  );
-
-  const Wrapper: any = onPress ? TouchableOpacity : View;
-  const wrapperProps = onPress
-    ? { onPress, activeOpacity: 0.9 }
-    : {};
+  const cardWidth = width - 36;
+  const cardHeight = verfuegbareHoehe - 28;
+  const heroHeight = cardHeight * 0.58;
 
   return (
-    <Wrapper style={{ height: verfuegbareHoehe }} {...wrapperProps}>
-      {/* Hintergrundbild (75%) */}
-      <View style={{ height: bildHoehe, overflow: "hidden" }}>
-        <Image
-          source={{ uri: item.hintergrundbild }}
-          style={StyleSheet.absoluteFillObject}
-          resizeMode="cover"
-        />
+    <View style={[styles.itemContainer, { height: verfuegbareHoehe }]}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.card,
+          {
+            width: cardWidth,
+            height: cardHeight,
+            transform: [{ scale: pressed ? 0.985 : 1 }],
+          },
+        ]}
+      >
+        <View style={[styles.hero, { height: heroHeight }]}>
+          <Image
+            source={{ uri: item.hintergrundbild }}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
 
-        {/* Profilbilder */}
-        <View
-          style={[
-            styles.teilnehmerReihe,
-            { gap: luecke, paddingHorizontal: seitenAbstand, paddingTop: 16 },
-          ]}
-        >
-          {item.teilnehmer.slice(0, 4).map((t) =>
-            t.bild ? (
-              <View
-                key={t.id}
-                style={[
-                  styles.profilRahmen,
-                  {
-                    width: profilGroesse,
-                    height: profilGroesse,
-                    borderRadius: profilGroesse / 2,
-                  },
-                ]}
-              >
-                <Image
-                  source={{ uri: t.bild }}
-                  style={{
-                    width: profilGroesse,
-                    height: profilGroesse,
-                    borderRadius: profilGroesse / 2,
-                  }}
-                />
-              </View>
-            ) : (
-              <ProfilPlatzhalter key={t.id} size={profilGroesse} />
-            )
-          )}
+          <View style={styles.heroOverlay} />
+
+          <View style={styles.topBar}>
+
+          </View>
+
+          <View style={styles.heroBottom}>
+            <Text style={styles.kicker} numberOfLines={2}>
+              
+            </Text>
+
+            <View style={styles.cta}>
+              <Text style={styles.ctaText}>MITMACHEN</Text>
+            </View>
+          </View>
         </View>
-      </View>
 
-      {/* Info-Bereich (25%) */}
-      <View style={[styles.infoBereich, { height: infoHoehe }]}>
-        <Text style={styles.titel} numberOfLines={1}>
-          {item.titel}
-        </Text>
-        <View style={styles.ortReihe}>
-          <Ionicons name="location" size={14} color="#e74c3c" />
-          <Text style={styles.ort} numberOfLines={1}>
-            {item.ort}
+        <View style={styles.content}>
+          <Text style={styles.title} numberOfLines={2}>
+            {item.titel}
           </Text>
+
+          <View style={styles.locationRow}>
+            <Ionicons name="location" size={15} color="#ff6b5f" />
+
+            <Text style={styles.location} numberOfLines={1}>
+              {item.ort}
+            </Text>
+          </View>
+
+          <Text style={styles.description} numberOfLines={3}>
+            {item.beschreibung}
+          </Text>
+
+          <View style={styles.footer}>
+            <View style={styles.avatarRow}>
+              {item.teilnehmer.slice(0, 4).map((t) => (
+                <MiniAvatar key={t.id} bild={t.bild} />
+              ))}
+
+              {item.teilnehmer.length > 4 && (
+                <View style={styles.moreAvatars}>
+                  <Text style={styles.moreAvatarsText}>
+                    +{item.teilnehmer.length - 4}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
         </View>
-        <Text style={styles.beschreibung}>{item.beschreibung}</Text>
-      </View>
-    </Wrapper>
+      </Pressable>
+    </View>
   );
 }
 
@@ -139,15 +126,23 @@ export default function TreffenScreen() {
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
   const [userAktivitaeten, setUserAktivitaeten] = useState<Aktivitaet[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       let abgebrochen = false;
-      (async () => {
+
+      async function laden() {
         const liste = await ladeUserAktivitaeten();
-        if (!abgebrochen) setUserAktivitaeten(liste);
-      })();
+
+        if (!abgebrochen) {
+          setUserAktivitaeten(liste);
+        }
+      }
+
+      laden();
+
       return () => {
         abgebrochen = true;
       };
@@ -159,16 +154,19 @@ export default function TreffenScreen() {
     ...DEMO_AKTIVITAETEN,
   ];
 
-  // Safe Areas for Header and Pill Navigation
-  const OBERE_LEISTE = insets.top + 44; 
-  const UNTERE_LEISTE = 100; // Safe space for the floating pill bar (24 margin + 65 height + 11 padding)
-  const verfuegbareHoehe = height - OBERE_LEISTE - UNTERE_LEISTE;
+  const headerHeight = insets.top + 22;
+  const bottomBarHeight = 100;
+  const verfuegbareHoehe = height - headerHeight - bottomBarHeight;
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#fff", paddingTop: OBERE_LEISTE }}>
+    <View style={styles.screen}>
       <FlatList
         data={alleAktivitaeten}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={{
+          paddingTop: headerHeight,
+          paddingBottom: bottomBarHeight,
+        }}
         renderItem={({ item }) => (
           <AktivitaetKarte
             item={item}
@@ -176,13 +174,17 @@ export default function TreffenScreen() {
             onPress={() =>
               router.push({
                 pathname: "/aktivitaet/[id]",
-                params: { id: item.id, modus: "teilnehmen" },
+                params: {
+                  id: item.id,
+                  modus: "teilnehmen",
+                },
               })
             }
           />
         )}
         pagingEnabled
         snapToInterval={verfuegbareHoehe}
+        snapToAlignment="start"
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
         getItemLayout={(_, index) => ({
@@ -192,86 +194,218 @@ export default function TreffenScreen() {
         })}
       />
 
-      {/* Floating Action Button: Treffen erstellen (über Standort-Auswahl) */}
-      <TouchableOpacity
-        style={[styles.fab, { bottom: UNTERE_LEISTE + 16 }]}
+      <Pressable
+        style={({ pressed }) => [
+          styles.fab,
+          {
+            bottom: bottomBarHeight + 18,
+            transform: [{ scale: pressed ? 0.94 : 1 }],
+          },
+        ]}
         onPress={() => router.push("/aktivitaet/standort-waehlen")}
-        activeOpacity={0.85}
       >
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
+        <Ionicons name="add" size={30} color="#fff" />
+      </Pressable>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  teilnehmerReihe: {
+  screen: {
+    flex: 1,
+    backgroundColor: "#777d80",
+  },
+
+  itemContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  card: {
+    borderRadius: 34,
+    backgroundColor: "#f8f8f6",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+
+  hero: {
+    borderTopLeftRadius: 34,
+    borderTopRightRadius: 34,
+    overflow: "hidden",
+  },
+
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  topBar: {
+    position: "absolute",
+    top: 24,
+    left: 24,
+    right: 24,
     flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  logo: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+  },
+
+  heroBottom: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    bottom: 0,
+    minHeight: 82,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: "#f8f8f6",
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  kicker: {
+    flex: 1,
+    color: "#303030",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "500",
+    marginRight: 14,
+  },
+
+  cta: {
+    height: 54,
+    borderRadius: 28,
+    backgroundColor: "#fff",
+    paddingHorizontal: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+
+  ctaText: {
+    color: "#111",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+
+  content: {
+    flex: 1,
+    paddingHorizontal: 22,
+    paddingTop: 26,
+    paddingBottom: 22,
+  },
+
+  title: {
+    color: "#111",
+    fontSize: 30,
+    lineHeight: 32,
+    fontWeight: "900",
+    letterSpacing: -1,
+    textTransform: "uppercase",
+    marginBottom: 10,
+  },
+
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+
+  location: {
+    flex: 1,
+    color: "#777",
+    fontSize: 13,
+    fontWeight: "600",
+    marginLeft: 5,
+  },
+
+  description: {
+    color: "#3d3d3d",
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+
+  footer: {
+    marginTop: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  avatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  avatarBubble: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#f8f8f6",
+    marginRight: -10,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 21,
+  },
+
+  moreAvatars: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#111",
+    borderWidth: 2,
+    borderColor: "#f8f8f6",
+    marginLeft: 2,
     justifyContent: "center",
     alignItems: "center",
   },
-  profilRahmen: {
-    borderWidth: 2.5,
-    borderColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-    elevation: 5,
-    overflow: "hidden",
+
+  moreAvatarsText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
   },
-  profilGrau: {
-    backgroundColor: "#b0b0b8",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-  infoBereich: {
-    backgroundColor: "#fff",
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#ddd",
-  },
-  titel: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#1a1a1a",
-    marginBottom: 4,
-  },
-  ortReihe: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginBottom: 6,
-  },
-  ort: {
-    fontSize: 13,
-    color: "#888",
-    flexShrink: 1,
-  },
-  beschreibung: {
-    fontSize: 14,
-    color: "#444",
-    lineHeight: 20,
-    flexShrink: 1,
-  },
+
   fab: {
     position: "absolute",
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#007AFF",
+    right: 22,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#050505",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    elevation: 8,
   },
 });
