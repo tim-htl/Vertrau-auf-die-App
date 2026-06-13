@@ -4,6 +4,9 @@ export default function RootLayout() {
   return (
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      {/* Onboarding-Wizard zum Gestalten (Mock, ohne Auth). Erreichbar über
+          den Button oben links im Profil-Tab. */}
+      <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       <Stack.Screen name="chat/[id]" options={{ headerBackTitle: "Chats" }} />
       <Stack.Screen name="kurs/[id]" options={{ headerBackTitle: "Kurse" }} />
       <Stack.Screen name="bereich/[...path]" options={{ headerBackTitle: "Zurück" }} />

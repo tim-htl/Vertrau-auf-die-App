@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
-import { useNavigation } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -572,6 +572,7 @@ function ProfilBearbeiten({
 
 export default function ProfilScreen() {
   const navigation = useNavigation();
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const [profil, setProfil] = useState<ProfilData>(DEFAULT_PROFIL);
   const [editModus, setEditModus] = useState(false);
@@ -605,6 +606,15 @@ export default function ProfilScreen() {
   // Header-Button dynamisch setzen
   useLayoutEffect(() => {
     navigation.setOptions({
+      // Demo-Einstieg zum Onboarding-Wizard (nur auf dem Designer-Branch).
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => router.push("/onboarding")}
+          style={{ marginLeft: 12 }}
+        >
+          <Text style={{ color: "#007AFF", fontSize: 16 }}>Onboarding</Text>
+        </TouchableOpacity>
+      ),
       headerRight: () => (
         <TouchableOpacity
           onPress={async () => {
@@ -632,7 +642,7 @@ export default function ProfilScreen() {
         </TouchableOpacity>
       ),
     });
-  }, [editModus, navigation]);
+  }, [editModus, navigation, router]);
 
   function onProfilAenderung(neuesDaten: ProfilData) {
     editProfilRef.current = neuesDaten;
