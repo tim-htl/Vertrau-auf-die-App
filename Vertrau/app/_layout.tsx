@@ -27,6 +27,7 @@ function RootNavigator() {
 
       <Stack.Protected guard={!!session}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="chat/[id]" options={{ headerBackTitle: "Chats" }} />
         <Stack.Screen name="kurs/[id]" options={{ headerBackTitle: "Kurse" }} />
         <Stack.Screen name="bereich/[...path]" options={{ headerBackTitle: "Zurück" }} />

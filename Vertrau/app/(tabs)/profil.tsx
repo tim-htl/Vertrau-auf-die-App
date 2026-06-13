@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
-import { useNavigation } from "expo-router";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -573,8 +573,12 @@ function ProfilBearbeiten({
 
 export default function ProfilScreen() {
   const navigation = useNavigation();
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const [profil, setProfil] = useState<ProfilData>(DEFAULT_PROFIL);
+  // null = lädt noch, false = noch kein Profil (→ Onboarding-Einstieg),
+  // true = Profil vorhanden
+  const [hatProfil, setHatProfil] = useState<boolean | null>(null);
   const [editModus, setEditModus] = useState(false);
   const [seite, setSeite] = useState(0);
   // false, solange der Finger auf dem Bilder-Carousel der AP liegt —
@@ -583,25 +587,33 @@ export default function ProfilScreen() {
   const [pagerAktiv, setPagerAktiv] = useState(true);
   const editProfilRef = useRef<ProfilData>(profil);
 
-  // Profil laden. Ältere gespeicherte Profile haben nur 5 Bild-Slots und
-  // keine frageAntworten — beim Laden aufs neue Format auffüllen.
-  useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((data) => {
-      if (data) {
-        const geladen = JSON.parse(data);
-        const bilder: (string | null)[] = [...(geladen.bilder ?? [])];
-        while (bilder.length < MAX_BILDER) bilder.push(null);
-        const voll: ProfilData = {
-          ...DEFAULT_PROFIL,
-          ...geladen,
-          bilder,
-          frageAntworten: geladen.frageAntworten ?? [],
-        };
-        setProfil(voll);
-        editProfilRef.current = voll;
-      }
-    });
-  }, []);
+  // Profil bei jedem Fokus laden (damit das Ergebnis aus dem Onboarding
+  // beim Zurückkehren sofort erscheint). Ältere Profile haben nur 5
+  // Bild-Slots und keine frageAntworten — beim Laden aufs neue Format
+  // auffüllen. Kein gespeichertes Profil → Onboarding-Einstieg.
+  useFocusEffect(
+    useCallback(() => {
+      if (editModus) return; // im Edit nicht überschreiben
+      AsyncStorage.getItem(STORAGE_KEY).then((data) => {
+        if (data) {
+          const geladen = JSON.parse(data);
+          const bilder: (string | null)[] = [...(geladen.bilder ?? [])];
+          while (bilder.length < MAX_BILDER) bilder.push(null);
+          const voll: ProfilData = {
+            ...DEFAULT_PROFIL,
+            ...geladen,
+            bilder,
+            frageAntworten: geladen.frageAntworten ?? [],
+          };
+          setProfil(voll);
+          editProfilRef.current = voll;
+          setHatProfil(true);
+        } else {
+          setHatProfil(false);
+        }
+      });
+    }, [editModus])
+  );
 
   function abmelden() {
     Alert.alert("Abmelden", "Möchtest du dich wirklich abmelden?", [
@@ -621,8 +633,13 @@ export default function ProfilScreen() {
     ]);
   }
 
-  // Header-Button dynamisch setzen
+  // Header-Button dynamisch setzen — nur wenn ein Profil existiert
+  // (im Onboarding-Einstieg keine Edit-/Abmelden-Buttons).
   useLayoutEffect(() => {
+    if (!hatProfil) {
+      navigation.setOptions({ headerLeft: undefined, headerRight: undefined });
+      return;
+    }
     navigation.setOptions({
       headerLeft: () => (
         <TouchableOpacity onPress={abmelden} style={{ marginLeft: 4 }}>
@@ -656,10 +673,31 @@ export default function ProfilScreen() {
         </TouchableOpacity>
       ),
     });
-  }, [editModus, navigation]);
+  }, [editModus, navigation, hatProfil]);
 
   function onProfilAenderung(neuesDaten: ProfilData) {
     editProfilRef.current = neuesDaten;
+  }
+
+  // Lädt noch
+  if (hatProfil === null) {
+    return <View style={{ flex: 1, backgroundColor: "#fff" }} />;
+  }
+
+  // Noch kein Profil → Einstieg in den Onboarding-Wizard
+  if (!hatProfil) {
+    return (
+      <View style={stile.einrichtenContainer}>
+        <Ionicons name="person-circle-outline" size={72} color="#C7C7CC" />
+        <Text style={stile.einrichtenTitel}>Profil einrichten</Text>
+        <Text style={stile.einrichtenText}>
+          Lege in wenigen Schritten dein Profil an, damit dich andere finden können.
+        </Text>
+        <TouchableOpacity style={stile.einrichtenKnopf} onPress={() => router.push("/onboarding")}>
+          <Text style={stile.einrichtenKnopfText}>Los geht&apos;s</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   if (editModus) {
@@ -952,6 +990,40 @@ const stile = StyleSheet.create({
     fontSize: 13,
     color: "#8E8E93",
     paddingVertical: 4,
+  },
+
+  // Onboarding-Einstieg (leeres Profil)
+  einrichtenContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 40,
+    gap: 10,
+  },
+  einrichtenTitel: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1a1a1a",
+    marginTop: 8,
+  },
+  einrichtenText: {
+    fontSize: 15,
+    color: "#8E8E93",
+    textAlign: "center",
+    lineHeight: 21,
+  },
+  einrichtenKnopf: {
+    marginTop: 16,
+    backgroundColor: "#007AFF",
+    borderRadius: 12,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+  },
+  einrichtenKnopfText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 
   // KP↔AP-Pager
