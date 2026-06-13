@@ -91,7 +91,9 @@ async function bildAuswaehlen(): Promise<string | null> {
 function ProfilAnsicht({ profil }: { profil: ProfilData }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const TAB_BAR = 49;
+  
+  // ANGEPASST: 100 statt 49, damit die Ansicht über der schwebenden Pill-Bar endet
+  const TAB_BAR = 100; 
   const HEADER = 44;
   const verfuegbar = height - insets.top - HEADER - TAB_BAR - insets.bottom;
 
@@ -298,7 +300,8 @@ function ProfilBearbeiten({
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView style={stile.editContainer} contentContainerStyle={{ paddingBottom: 40 }}>
+      {/* ANGEPASST: paddingBottom 120 statt 40, damit unter dem Formular Platz für die schwebende Bar ist */}
+      <ScrollView style={stile.editContainer} contentContainerStyle={{ paddingBottom: 120 }}>
 
         {/* Bilder: 2 Reihen à 5 Slots. Reihe 1 (= bilder[0..4]) erscheint
             auch auf der Profilkarte, alle 10 in der ausführlichen Ansicht. */}
@@ -943,7 +946,7 @@ const stile = StyleSheet.create({
   // KP↔AP-Pager
   pagerDots: {
     position: "absolute",
-    bottom: 10,
+    bottom: 100, // ANGEPASST: Hovert nun über dem Pill-Bar-Bereich
     alignSelf: "center",
     flexDirection: "row",
     gap: 6,
