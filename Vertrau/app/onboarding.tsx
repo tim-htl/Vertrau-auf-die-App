@@ -98,6 +98,16 @@ type Schritt = {
 
 const SCHRITTE: Schritt[] = [
   {
+    // Platzhalter. Die echte Uni-Mail-Verifikation (Token-Mail an die
+    // Uni-Adresse) kommt in Phase 7, sobald der E-Mail-Provider steht.
+    // Position ganz vorne ist bewusst gewählt; bis dahin überspringbar.
+    id: "unimail",
+    titel: "Bestätige deine Uni",
+    untertitel: "Mit deiner Uni-Mail bestätigst du, dass du wirklich an deiner Uni bist.",
+    ueberspringbar: true,
+    fertig: () => true,
+  },
+  {
     id: "name",
     titel: "Wie heißt du?",
     untertitel: "Name und Alter erscheinen auf deinem Profil.",
@@ -111,7 +121,6 @@ const SCHRITTE: Schritt[] = [
     ueberspringbar: false,
     fertig: (e) => !!e.uniId && !!e.studiengangId,
   },
-  // [RESERVIERT] Phase 7: Uni-Mail-Verifikation kommt hier hin.
   {
     id: "hobbies",
     titel: "Deine Hobbies",
@@ -218,6 +227,7 @@ export default function OnboardingScreen() {
           <Text style={stile.titel}>{schritt.titel}</Text>
           <Text style={stile.untertitel}>{schritt.untertitel}</Text>
 
+          {schritt.id === "unimail" && <SchrittUniMail />}
           {schritt.id === "name" && <SchrittName entwurf={entwurf} set={set} />}
           {schritt.id === "uni" && <SchrittUni entwurf={entwurf} set={set} />}
           {schritt.id === "hobbies" && <SchrittHobbies entwurf={entwurf} set={set} />}
@@ -242,6 +252,39 @@ export default function OnboardingScreen() {
           <Text style={stile.weiterText}>{istLetzter ? "Fertig" : "Weiter"}</Text>
         </TouchableOpacity>
       </View>
+    </View>
+  );
+}
+
+// ─── Schritt 0: Uni-Mail-Verifikation (Platzhalter, Phase 7) ──────────────────
+
+function SchrittUniMail() {
+  // Reines Platzhalter-Feld (Mock): noch keine echte Verifikation. Der Wert
+  // wird bewusst NICHT ins Profil übernommen — die Uni-Mail dient später
+  // ausschließlich der Verifikation, nicht der Anzeige.
+  const [uniMail, setUniMail] = useState("");
+
+  return (
+    <View style={stile.feldGruppe}>
+      <View style={stile.platzhalterHinweis}>
+        <Ionicons name="shield-checkmark-outline" size={20} color="#007AFF" />
+        <Text style={stile.platzhalterHinweisText}>
+          Die Uni-Mail-Verifikation wird in einer späteren Version aktiv. Du
+          kannst diesen Schritt vorerst überspringen.
+        </Text>
+      </View>
+
+      <Text style={[stile.feldLabel, { marginTop: 22 }]}>Uni-Mail-Adresse</Text>
+      <TextInput
+        style={stile.textFeld}
+        value={uniMail}
+        onChangeText={setUniMail}
+        placeholder="vorname.nachname@tu-berlin.de"
+        placeholderTextColor="#aaa"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+      />
     </View>
   );
 }
@@ -613,6 +656,15 @@ const stile = StyleSheet.create({
     marginBottom: 8,
   },
   optional: { fontWeight: "500", textTransform: "none", letterSpacing: 0 },
+  platzhalterHinweis: {
+    flexDirection: "row",
+    gap: 10,
+    backgroundColor: "#EAF3FF",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "flex-start",
+  },
+  platzhalterHinweisText: { flex: 1, fontSize: 14, color: "#1a1a1a", lineHeight: 19 },
   textFeld: {
     backgroundColor: "#F2F2F7",
     borderRadius: 12,

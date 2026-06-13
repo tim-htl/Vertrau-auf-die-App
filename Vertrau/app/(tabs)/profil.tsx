@@ -28,6 +28,8 @@ import {
 import { HOBBY_KATALOG, hobbyIcon } from "../../data/hobbies";
 import { alleModule, DEMO_STUDIENGANG } from "../../data/kurse";
 import { signOut } from "../../lib/supabase";
+import { setzeOnboardingZurueck } from "../../lib/onboarding";
+import { resetSwipes } from "../../data/swipes";
 
 // Modul-Namen aus der Moduldatenbank des Studiengangs (dedupliziert) —
 // Module werden daraus gewählt, nicht mehr frei eingetippt.
@@ -623,6 +625,13 @@ export default function ProfilScreen() {
         style: "destructive",
         onPress: async () => {
           try {
+            // Mock-first-Reset: ohne echtes Profil-Backend liegt alles lokal.
+            // Beim Abmelden zurücksetzen, damit der nächste Registrieren →
+            // Onboarding-Durchlauf sauber bei null startet (sonst würde das
+            // alte Mock-Profil/Flag den neuen User "übernehmen").
+            await AsyncStorage.removeItem(STORAGE_KEY);
+            await setzeOnboardingZurueck();
+            await resetSwipes();
             await signOut();
             // Session weg → AuthGate im RootLayout wechselt zum Login-Screen.
           } catch (e) {
