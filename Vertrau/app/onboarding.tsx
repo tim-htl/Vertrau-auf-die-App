@@ -28,6 +28,7 @@ import {
 import { HOBBY_KATALOG, hobbyIcon } from "../data/hobbies";
 import {
   KATALOG_UNIS,
+  mailDomainFuerUni,
   modulnamenFuerStudiengang,
   studiengaengeFuerUni,
 } from "../data/onboarding-katalog";
@@ -54,6 +55,9 @@ type Entwurf = {
   studiengangId: string | null;
   studiengangName: string;
   module: string[];
+  // Lokaler Teil der Uni-Mail (vor dem @). Die Domain kommt aus der Uni.
+  // Reine Verifikation, wird NICHT ins Profil übernommen.
+  uniMailLokal: string;
   hobbies: string[];
   bio: string;
   frageAntworten: FrageAntwort[];
@@ -72,6 +76,7 @@ const LEER: Entwurf = {
   studiengangId: null,
   studiengangName: "",
   module: [],
+  uniMailLokal: "",
   hobbies: [],
   bio: "",
   frageAntworten: [],
@@ -107,16 +112,6 @@ type Schritt = {
 
 const SCHRITTE: Schritt[] = [
   {
-    // Platzhalter. Die echte Uni-Mail-Verifikation (Token-Mail an die
-    // Uni-Adresse) kommt in Phase 7, sobald der E-Mail-Provider steht.
-    // Position ganz vorne ist bewusst gewählt; bis dahin überspringbar.
-    id: "unimail",
-    titel: "Bestätige deine Uni",
-    untertitel: "Mit deiner Uni-Mail bestätigst du, dass du wirklich an deiner Uni bist.",
-    ueberspringbar: true,
-    fertig: () => true,
-  },
-  {
     id: "name",
     titel: "Wie heißt du?",
     untertitel: "Name und Alter erscheinen auf deinem Profil.",
@@ -129,6 +124,17 @@ const SCHRITTE: Schritt[] = [
     untertitel: "Uni, Studiengang und deine Module.",
     ueberspringbar: false,
     fertig: (e) => !!e.uniId && !!e.studiengangId,
+  },
+  {
+    // Direkt nach der Uni-Wahl: die Domain (Teil nach dem @) ist damit
+    // bekannt und wird fest vorgegeben — so sind nur echte Uni-Adressen
+    // möglich. Platzhalter: die echte Token-Verifikation kommt in Phase 7
+    // (E-Mail-Provider), bis dahin überspringbar.
+    id: "unimail",
+    titel: "Bestätige deine Uni-Mail",
+    untertitel: "Mit deiner Uni-Mail bestätigst du, dass du wirklich dort studierst.",
+    ueberspringbar: true,
+    fertig: () => true,
   },
   {
     id: "hobbies",
@@ -279,8 +285,8 @@ export default function OnboardingScreen() {
           <Text style={stile.titel}>{schritt.titel}</Text>
           <Text style={stile.untertitel}>{schritt.untertitel}</Text>
 
-          {schritt.id === "unimail" && <SchrittUniMail />}
           {schritt.id === "name" && <SchrittName entwurf={entwurf} set={set} />}
+          {schritt.id === "unimail" && <SchrittUniMail entwurf={entwurf} set={set} />}
           {schritt.id === "uni" && <SchrittUni entwurf={entwurf} set={set} />}
           {schritt.id === "hobbies" && <SchrittHobbies entwurf={entwurf} set={set} />}
           {schritt.id === "bio" && <SchrittBio entwurf={entwurf} set={set} />}
@@ -313,35 +319,41 @@ export default function OnboardingScreen() {
   );
 }
 
-// ─── Schritt 0: Uni-Mail-Verifikation (Platzhalter, Phase 7) ──────────────────
+// ─── Schritt 3: Uni-Mail-Verifikation (Platzhalter, Phase 7) ──────────────────
 
-function SchrittUniMail() {
-  // Reines Platzhalter-Feld (Mock): noch keine echte Verifikation. Der Wert
-  // wird bewusst NICHT ins Profil übernommen — die Uni-Mail dient später
-  // ausschließlich der Verifikation, nicht der Anzeige.
-  const [uniMail, setUniMail] = useState("");
+function SchrittUniMail({ entwurf, set }: { entwurf: Entwurf; set: (t: Partial<Entwurf>) => void }) {
+  // Domain kommt aus der zuvor gewählten Uni und ist fest — der Nutzer gibt
+  // nur den lokalen Teil ein. So sind ausschließlich echte Uni-Adressen
+  // möglich. Der Wert geht NICHT ins Profil (reine Verifikation).
+  const domain = entwurf.uniId ? mailDomainFuerUni(entwurf.uniId) : null;
 
   return (
     <View style={stile.feldGruppe}>
       <View style={stile.platzhalterHinweis}>
         <Ionicons name="shield-checkmark-outline" size={20} color="#007AFF" />
         <Text style={stile.platzhalterHinweisText}>
-          Die Uni-Mail-Verifikation wird in einer späteren Version aktiv. Du
-          kannst diesen Schritt vorerst überspringen.
+          Die Bestätigung per E-Mail wird in einer späteren Version aktiv. Du
+          kannst den Schritt vorerst überspringen.
         </Text>
       </View>
 
-      <Text style={[stile.feldLabel, { marginTop: 22 }]}>Uni-Mail-Adresse</Text>
-      <TextInput
-        style={stile.textFeld}
-        value={uniMail}
-        onChangeText={setUniMail}
-        placeholder="vorname.nachname@tu-berlin.de"
-        placeholderTextColor="#aaa"
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="email-address"
-      />
+      <Text style={[stile.feldLabel, { marginTop: 22 }]}>Deine Uni-Mail</Text>
+      <View style={stile.mailZeile}>
+        <TextInput
+          style={stile.mailLokalFeld}
+          value={entwurf.uniMailLokal}
+          onChangeText={(t) => set({ uniMailLokal: t.replace(/[@\s]/g, "") })}
+          placeholder="vorname.nachname"
+          placeholderTextColor="#aaa"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+        />
+        <Text style={stile.mailDomain}>@{domain ?? "uni.de"}</Text>
+      </View>
+      <Text style={stile.mailDomainHinweis}>
+        Nur Adressen mit @{domain ?? "deiner Uni"} werden akzeptiert.
+      </Text>
     </View>
   );
 }
@@ -775,6 +787,16 @@ const stile = StyleSheet.create({
     alignItems: "flex-start",
   },
   platzhalterHinweisText: { flex: 1, fontSize: 14, color: "#1a1a1a", lineHeight: 19 },
+  mailZeile: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F2F2F7",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+  },
+  mailLokalFeld: { flex: 1, paddingVertical: 13, fontSize: 16, color: "#1a1a1a" },
+  mailDomain: { fontSize: 16, color: "#8E8E93", fontWeight: "500" },
+  mailDomainHinweis: { fontSize: 13, color: "#8E8E93", marginTop: 8 },
   textFeld: {
     backgroundColor: "#F2F2F7",
     borderRadius: 12,

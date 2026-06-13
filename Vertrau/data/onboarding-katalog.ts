@@ -9,6 +9,10 @@ import { alleModule, DEMO_STUDIENGANG } from "./kurse";
 export type KatalogUni = {
   id: string;
   name: string;
+  // Domain der Uni-Mail (Teil nach dem @). Wird im Verifikations-Schritt
+  // fest vorgegeben, damit nur echte Uni-Adressen eingegeben werden können.
+  // Spiegelt universitaeten.emailDomains aus dem Backend (hier die primäre).
+  mailDomain: string;
 };
 
 export type KatalogStudiengang = {
@@ -21,9 +25,9 @@ export type KatalogStudiengang = {
 const WING_MODULE = [...new Set(alleModule(DEMO_STUDIENGANG.moduldatenbank).map((m) => m.name))];
 
 export const KATALOG_UNIS: KatalogUni[] = [
-  { id: "tub", name: "Technische Universität Berlin" },
-  { id: "fub", name: "Freie Universität Berlin" },
-  { id: "hub", name: "Humboldt-Universität zu Berlin" },
+  { id: "tub", name: "Technische Universität Berlin", mailDomain: "tu-berlin.de" },
+  { id: "fub", name: "Freie Universität Berlin", mailDomain: "fu-berlin.de" },
+  { id: "hub", name: "Humboldt-Universität zu Berlin", mailDomain: "hu-berlin.de" },
 ];
 
 // Studiengänge je Uni. Nur diese werden im Schritt nach der Uni-Wahl
@@ -70,6 +74,10 @@ export const KATALOG_STUDIENGAENGE: Record<string, KatalogStudiengang[]> = {
 
 export function studiengaengeFuerUni(uniId: string): KatalogStudiengang[] {
   return KATALOG_STUDIENGAENGE[uniId] ?? [];
+}
+
+export function mailDomainFuerUni(uniId: string): string | null {
+  return KATALOG_UNIS.find((u) => u.id === uniId)?.mailDomain ?? null;
 }
 
 export function modulnamenFuerStudiengang(uniId: string, studiengangId: string): string[] {
