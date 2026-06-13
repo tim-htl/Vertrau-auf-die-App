@@ -1,17 +1,23 @@
 import { Stack } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { AuthProvider, useAuth } from "../lib/auth-context";
+import { OnboardingProvider, useOnboarding } from "../lib/onboarding-context";
 
-// AuthGate: expo-router rendert nur die Screens, deren Stack.Protected-Guard
-// true ist. Ohne Session existieren die Tab-Routen gar nicht (Navigation
-// dorthin unmöglich), mit Session verschwinden die Auth-Screens — expo-router
-// leitet beim Guard-Wechsel automatisch auf die erste verfügbare Route um.
+// AuthGate + OnboardingGate: expo-router rendert nur die Screens, deren
+// Stack.Protected-Guard true ist. Drei sich gegenseitig ausschließende
+// Zustände:
+//   - keine Session                      → (auth) Login/Register
+//   - Session, Onboarding offen          → onboarding-Wizard
+//   - Session, Onboarding abgeschlossen  → (tabs) + Detail-Screens
+// Beim Wechsel eines Guards (Login, Onboarding-Abschluss) leitet
+// expo-router automatisch auf die erste verfügbare Route um.
 function RootNavigator() {
-  const { session, loading } = useAuth();
+  const { session, loading: authLoading } = useAuth();
+  const { onboardingDone, loading: onboardingLoading } = useOnboarding();
 
-  // Session wird noch aus dem SecureStore geladen → Spinner statt kurzem
-  // Aufblitzen des Login-Screens.
-  if (loading) {
+  // Solange Session ODER Onboarding-Flag noch laden → Spinner statt
+  // kurzem Aufblitzen des falschen Bereichs.
+  if (authLoading || onboardingLoading) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator size="large" color="#007AFF" />
@@ -25,9 +31,15 @@ function RootNavigator() {
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       </Stack.Protected>
 
-      <Stack.Protected guard={!!session}>
+      <Stack.Protected guard={!!session && !onboardingDone}>
+        <Stack.Screen
+          name="onboarding"
+          options={{ headerShown: false, gestureEnabled: false }}
+        />
+      </Stack.Protected>
+
+      <Stack.Protected guard={!!session && onboardingDone}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="chat/[id]" options={{ headerBackTitle: "Chats" }} />
         <Stack.Screen name="kurs/[id]" options={{ headerBackTitle: "Kurse" }} />
         <Stack.Screen name="bereich/[...path]" options={{ headerBackTitle: "Zurück" }} />
@@ -45,7 +57,9 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootNavigator />
+      <OnboardingProvider>
+        <RootNavigator />
+      </OnboardingProvider>
     </AuthProvider>
   );
 }

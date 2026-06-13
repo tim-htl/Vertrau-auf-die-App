@@ -30,6 +30,7 @@ import {
   modulnamenFuerStudiengang,
   studiengaengeFuerUni,
 } from "../data/onboarding-katalog";
+import { useOnboarding } from "../lib/onboarding-context";
 
 // ─── Onboarding-Wizard (Mock-first) ───────────────────────────────────────────
 //
@@ -144,6 +145,7 @@ const SCHRITTE: Schritt[] = [
 export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { abschliessen: onboardingAbschliessen } = useOnboarding();
   const [index, setIndex] = useState(0);
   const [entwurf, setEntwurf] = useState<Entwurf>(LEER);
 
@@ -184,7 +186,9 @@ export default function OnboardingScreen() {
         .filter((fa) => fa.antwort.length > 0),
     };
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profil));
-    router.replace("/(tabs)/profil");
+    // Flag setzen → RootNavigator-Guard wechselt automatisch zu den Tabs
+    // (kein manuelles Navigieren nötig, gleicher Mechanismus wie beim Login).
+    await onboardingAbschliessen();
   }
 
   return (
