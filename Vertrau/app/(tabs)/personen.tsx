@@ -16,12 +16,19 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { hobbyIcon } from "../../data/hobbies";
 import { DEMO_PERSONEN, type Person } from "../../data/personen";
-import { ladeGelikte, likePerson, resetSwipes } from "../../data/swipes";
+import { likePerson, resetSwipes } from "../../data/swipes";
+
+const SCREEN_BG = "#FFFFFF";
+const CARD_BG = "#FFFFFF";
+const GLASS_BG = "rgba(255,255,255,0.64)";
+const TEXT = "#1A1A1A";
+const MUTED = "#8E8E93";
+const LINE = "rgba(35, 35, 35, 0.1)";
 
 function BildPlatzhalter({ size }: { size: number }) {
   return (
     <View style={[styles.bildPlatzhalter, styles.neuSoftInset, { width: size, height: size }]}>
-      <Ionicons name="person" size={size * 0.5} color="#fff" style={{ marginTop: size * 0.08 }} />
+      <Ionicons name="person" size={size * 0.5} color="#ccc" style={{ marginTop: size * 0.08 }} />
     </View>
   );
 }
@@ -51,7 +58,7 @@ function TagReihe({
         {items.map((item, i) => (
           <View key={i} style={[styles.tag, styles.neuSoft]}>
             {mitIcons && (
-              <Ionicons name={hobbyIcon(item)} size={12} color="#1a1a1a" style={{ marginRight: 4 }} />
+              <Ionicons name={hobbyIcon(item)} size={12} color={TEXT} style={{ marginRight: 4 }} />
             )}
             <Text style={styles.tagText}>{item}</Text>
           </View>
@@ -70,78 +77,72 @@ export function PersonenKarte({
   breite: number;
   hoehe: number;
 }) {
+  const cardBreite = breite;
+  const cardHoehe = hoehe;
+
   const seitenPadding = 16;
   const spaltenGap = 14;
-  const innenBreite = breite - seitenPadding * 2;
-  const bildSpalteBreite = innenBreite * 0.33;
-  const infoSpalteBreite = innenBreite - bildSpalteBreite - spaltenGap;
+  const trennerBreite = StyleSheet.hairlineWidth;
+
+  const innenBreite = cardBreite - seitenPadding * 2;
+  const bildSpalteBreite = innenBreite * 0.34;
+  const glasBreite = seitenPadding + bildSpalteBreite + spaltenGap * 0.75;
+  const infoSpalteBreite =
+    innenBreite - bildSpalteBreite - spaltenGap * 2 - trennerBreite;
 
   const anzahlBilder = 5;
   const bildAbstand = 8;
-  const verfuegbarFuerBilder = hoehe - 32;
+  const verfuegbarFuerBilder = cardHoehe - 34;
   const bildKanteNachHoehe =
     (verfuegbarFuerBilder - bildAbstand * (anzahlBilder - 1)) / anzahlBilder;
   const bildKante = Math.min(bildSpalteBreite, bildKanteNachHoehe);
 
   return (
-    <View style={[styles.karte, styles.neuCard, { width: breite, height: hoehe }]}>
-      <View style={[styles.zeile, { paddingHorizontal: seitenPadding, gap: spaltenGap }]}>
-        <View style={{ width: bildSpalteBreite, gap: bildAbstand, alignItems: "center" }}>
-          {person.bilder.slice(0, anzahlBilder).map((bild, i) =>
-            bild ? (
-              <View
-                key={i}
-                style={[
-                  styles.bildRahmen,
-                  styles.neuSoft,
-                  {
-                    width: bildKante,
-                    height: bildKante,
-                    borderRadius: 14,
-                  },
-                ]}
-              >
-                <Image
-                  source={{ uri: bild }}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    borderRadius: 14,
-                  }}
-                />
-              </View>
-            ) : (
-              <View
-                key={i}
-                style={[
-                  styles.bildRahmen,
-                  styles.neuSoft,
-                  {
-                    width: bildKante,
-                    height: bildKante,
-                    borderRadius: 14,
-                  },
-                ]}
-              >
-                <BildPlatzhalter size={bildKante} />
-              </View>
-            )
-          )}
-        </View>
+    <View style={[styles.karteAussen, { width: breite, height: hoehe }]}>
+      <View style={[styles.karteSchatten, { width: cardBreite, height: cardHoehe }]}>
+        <View style={styles.karteClip}>
+          <View pointerEvents="none" style={[styles.glasPanel, { width: glasBreite }]}>
+            <View style={styles.glasMilch} />
+          </View>
 
-        <View style={[styles.infoSpalte, { width: infoSpalteBreite }]}>
-          <Text style={styles.nameText} numberOfLines={1}>
-            {person.name}
-          </Text>
-          <Text style={styles.alterText}>{person.alter} Jahre</Text>
+          <View style={[styles.zeile, { paddingHorizontal: seitenPadding, gap: spaltenGap }]}>
+            <View style={{ width: bildSpalteBreite, gap: bildAbstand, alignItems: "center" }}>
+              {person.bilder.slice(0, anzahlBilder).map((bild, i) =>
+                bild ? (
+                  <View
+                    key={i}
+                    style={[styles.bildRahmen, styles.neuSoft, { width: bildKante, height: bildKante }]}
+                  >
+                    <Image source={{ uri: bild }} style={{ width: "100%", height: "100%" }} />
+                  </View>
+                ) : (
+                  <View
+                    key={i}
+                    style={[styles.bildRahmen, styles.neuSoft, { width: bildKante, height: bildKante }]}
+                  >
+                    <BildPlatzhalter size={bildKante} />
+                  </View>
+                )
+              )}
+            </View>
 
-          <View style={styles.trennerOben} />
+            <View style={styles.vertikalerTrenner} />
 
-          <InfoZeile label="Bio" wert={person.kurzbeschreibung} />
-          <InfoZeile label="Uni" wert={person.uni} />
-          <InfoZeile label="Studiengang" wert={person.studiengang} />
-          <TagReihe label="Module" items={person.module} />
-          <TagReihe label="Hobbies" items={person.hobbies} mitIcons />
+            <View style={[styles.infoSpalte, { width: infoSpalteBreite }]}>
+              <Text style={styles.nameText} numberOfLines={1}>
+                {person.name}
+              </Text>
+              <Text style={styles.alterText}>{person.alter} Jahre</Text>
+
+              <View style={styles.trennerOben} />
+
+              <InfoZeile label="Bio" wert={person.kurzbeschreibung} />
+              <InfoZeile label="Uni" wert={person.uni} />
+              <InfoZeile label="Studiengang" wert={person.studiengang} />
+              <TagReihe label="Module" items={person.module} />
+              <TagReihe label="Hobbies" items={person.hobbies} mitIcons />
+            </View>
+          </View>
         </View>
       </View>
     </View>
@@ -225,10 +226,7 @@ function SwipeKarte({
 
   return (
     <View style={{ width: breite, height: hoehe }}>
-      <Animated.View
-        style={[styles.ladeFlaeche, { height: hoehe, opacity: ladung }]}
-        pointerEvents="none"
-      >
+      <Animated.View style={[styles.ladeFlaeche, { height: hoehe, opacity: ladung }]} pointerEvents="none">
         <Animated.View style={[styles.ladeKreis, styles.neuSoftStrong, { transform: [{ scale: ladeSkala }] }]}>
           <Ionicons name="people" size={44} color="#34C759" />
         </Animated.View>
@@ -236,10 +234,7 @@ function SwipeKarte({
 
       <Animated.View
         {...panResponder.panHandlers}
-        style={{
-          backgroundColor: "#F4F5F7",
-          transform: [{ translateX }, { rotate: rotation }],
-        }}
+        style={{ backgroundColor: SCREEN_BG, transform: [{ translateX }, { rotate: rotation }] }}
       >
         <Pressable onPress={onOeffnen}>
           <PersonenKarte person={person} breite={breite} hoehe={hoehe} />
@@ -253,7 +248,6 @@ export default function PersonenScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-
   const headerHeight = insets.top + 44;
   const bottomBarHeight = 100;
   const karteHoehe = height - headerHeight - bottomBarHeight;
@@ -261,14 +255,13 @@ export default function PersonenScreen() {
   const [feed, setFeed] = useState<Person[] | null>(null);
   const [listeScrollbar, setListeScrollbar] = useState(true);
   const [matchInfo, setMatchInfo] = useState<{ name: string; chatId: string } | null>(null);
-
   const bannerY = useRef(new Animated.Value(-120)).current;
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    ladeGelikte().then((gelikte) =>
-      setFeed(DEMO_PERSONEN.filter((p) => !gelikte.includes(p.id)))
-    );
+    // Demo immer mit allen Personen starten, nicht nur mit den noch nicht gelikten.
+    // So erscheinen auch die anderen Personen wieder neben Lena Fischer.
+    setFeed(DEMO_PERSONEN);
 
     return () => {
       if (bannerTimer.current) clearTimeout(bannerTimer.current);
@@ -278,25 +271,18 @@ export default function PersonenScreen() {
   function zeigeMatchBanner(name: string, chatId: string) {
     setMatchInfo({ name, chatId });
     Animated.spring(bannerY, { toValue: 0, friction: 7, useNativeDriver: true }).start();
-
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
     bannerTimer.current = setTimeout(verbergeMatchBanner, 4000);
   }
 
   function verbergeMatchBanner() {
-    Animated.timing(bannerY, { toValue: -120, duration: 250, useNativeDriver: true }).start(
-      () => setMatchInfo(null)
-    );
+    Animated.timing(bannerY, { toValue: -120, duration: 250, useNativeDriver: true }).start(() => setMatchInfo(null));
   }
 
   async function personGeliked(person: Person) {
     setFeed((f) => (f ? f.filter((p) => p.id !== person.id) : f));
-
     const ergebnis = await likePerson(person);
-
-    if (ergebnis.match && ergebnis.chatId) {
-      zeigeMatchBanner(person.name, ergebnis.chatId);
-    }
+    if (ergebnis.match && ergebnis.chatId) zeigeMatchBanner(person.name, ergebnis.chatId);
   }
 
   async function demoZuruecksetzen() {
@@ -304,26 +290,55 @@ export default function PersonenScreen() {
     setFeed(DEMO_PERSONEN);
   }
 
-  if (feed === null) {
-    return <View style={styles.hintergrund} />;
-  }
+  if (feed === null) return <View style={styles.hintergrund} />;
 
   if (feed.length === 0) {
     return (
-      <View style={[styles.hintergrund, styles.leerContainer, { paddingTop: headerHeight }]}>
-        <Ionicons name="people-outline" size={48} color="#C7C7CC" />
-        <Text style={styles.leerTitel}>Keine weiteren Profile</Text>
-        <Text style={styles.leerText}>Du hast alle Profile durchgeswiped.</Text>
-
-        <TouchableOpacity style={[styles.resetKnopf, styles.neuSoft]} onPress={demoZuruecksetzen}>
-          <Text style={styles.resetKnopfText}>Demo zurücksetzen</Text>
+      <View
+        style={[
+          styles.hintergrund,
+          styles.leerContainer,
+          { paddingTop: headerHeight },
+        ]}
+      >
+        <TouchableOpacity
+          style={[styles.profilKnopf, { top: insets.top + 10 }]}
+          onPress={() => router.push("/profil")}
+        >
+          <Ionicons name="person-circle" size={40} color={TEXT} />
         </TouchableOpacity>
+  
+        <View style={[styles.leerKarte, styles.karteSchatten]}>
+          <View style={styles.leerKarteInnen}>
+            <View style={styles.leerGlasPanel} />
+            <Ionicons name="people-outline" size={48} color="#C7C7CC" />
+  
+            <Text style={styles.leerTitel}>
+              für heute warst du genug am Handy :)
+            </Text>
+  
+            <TouchableOpacity
+              style={[styles.resetKnopf, styles.neuSoft]}
+              onPress={async () => {
+                await resetSwipes();
+                setFeed(DEMO_PERSONEN);
+              }}
+            >
+              <Text style={styles.resetKnopfText}>
+                Demo zurücksetzen
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.hintergrund}>
+      <TouchableOpacity style={[styles.profilKnopf, { top: insets.top + 10 }]} onPress={() => router.push("/profil")}>
+        <Ionicons name="person-circle" size={40} color={TEXT} />
+      </TouchableOpacity>
       <FlatList
         data={feed}
         keyExtractor={(item) => item.id}
@@ -332,7 +347,6 @@ export default function PersonenScreen() {
         showsVerticalScrollIndicator={false}
         decelerationRate="fast"
         snapToInterval={karteHoehe}
-        snapToAlignment="start"
         contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: bottomBarHeight }}
         renderItem={({ item }) => (
           <SwipeKarte
@@ -344,39 +358,14 @@ export default function PersonenScreen() {
             onPanAktiv={(aktiv) => setListeScrollbar(!aktiv)}
           />
         )}
-        getItemLayout={(_, index) => ({
-          length: karteHoehe,
-          offset: karteHoehe * index,
-          index,
-        })}
       />
-
       {matchInfo && (
-        <Animated.View
-          style={[
-            styles.matchBanner,
-            {
-              top: headerHeight + 8,
-              transform: [{ translateY: bannerY }],
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={[styles.matchBannerInhalt, styles.neuMatch]}
-            activeOpacity={0.85}
-            onPress={() => {
-              const chatId = matchInfo.chatId;
-              verbergeMatchBanner();
-              router.push(`/chat/${chatId}`);
-            }}
-          >
+        <Animated.View style={[styles.matchBanner, { top: headerHeight + 8, transform: [{ translateY: bannerY }] }]}>
+          <TouchableOpacity style={[styles.matchBannerInhalt, styles.neuMatch]} onPress={() => { verbergeMatchBanner(); router.push(`/chat/${matchInfo.chatId}`); }}>
             <Ionicons name="people" size={22} color="#fff" />
-
             <View style={{ flex: 1 }}>
               <Text style={styles.matchBannerTitel}>Ihr seid jetzt Freunde! 🎉</Text>
-              <Text style={styles.matchBannerText}>
-                {matchInfo.name} hat dich auch geliked — tippe, um zu chatten.
-              </Text>
+              <Text style={styles.matchBannerText}>{matchInfo.name} hat dich auch geliked.</Text>
             </View>
           </TouchableOpacity>
         </Animated.View>
@@ -386,228 +375,43 @@ export default function PersonenScreen() {
 }
 
 const styles = StyleSheet.create({
-  hintergrund: {
-    flex: 1,
-    backgroundColor: "#F4F5F7",
-  },
-
-  neuSoft: {
-    shadowColor: "#D8DDE3",
-    shadowOpacity: 0.75,
-    shadowRadius: 5,
-    shadowOffset: { width: 3, height: 3 },
-    elevation: 3,
-  },
-
-  neuSoftStrong: {
-    shadowColor: "#D8DDE3",
-    shadowOpacity: 0.9,
-    shadowRadius: 10,
-    shadowOffset: { width: 5, height: 5 },
-    elevation: 5,
-  },
-
-  neuSoftInset: {
-    shadowColor: "#BFC5CC",
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-    shadowOffset: { width: 2, height: 2 },
-    elevation: 2,
-  },
-
-  neuCard: {
-    backgroundColor: "#F4F5F7",
-  },
-
-  neuMatch: {
-    shadowColor: "#1E9E4A",
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    shadowOffset: { width: 4, height: 5 },
-    elevation: 6,
-  },
-
-  ladeFlaeche: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: "40%",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  ladeKreis: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: "#E8F8EE",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.9)",
-  },
-
-  matchBanner: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    zIndex: 100,
-  },
-
-  matchBannerInhalt: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#34C759",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.28)",
-  },
-
-  matchBannerTitel: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-
-  matchBannerText: {
-    color: "rgba(255,255,255,0.9)",
-    fontSize: 13,
-    marginTop: 1,
-  },
-
-  leerContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 32,
-  },
-
-  leerTitel: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1a1a1a",
-    marginTop: 8,
-  },
-
-  leerText: {
-    fontSize: 14,
-    color: "#8E8E93",
-    textAlign: "center",
-  },
-
-  resetKnopf: {
-    marginTop: 16,
-    backgroundColor: "#F4F5F7",
-    borderRadius: 14,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.9)",
-  },
-
-  resetKnopfText: {
-    color: "#007AFF",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-
-  karte: {
-    justifyContent: "flex-start",
-    paddingTop: 16,
-  },
-
-  zeile: {
-    flexDirection: "row",
-    flex: 1,
-    paddingBottom: 16,
-  },
-
-  infoSpalte: {
-    flex: 1,
-    paddingTop: 4,
-  },
-
-  bildRahmen: {
-    backgroundColor: "#F4F5F7",
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.85)",
-  },
-
-  bildPlatzhalter: {
-    backgroundColor: "#C7C7CC",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-
-  nameText: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#1a1a1a",
-    letterSpacing: -0.5,
-  },
-
-  alterText: {
-    fontSize: 15,
-    color: "#8E8E93",
-    marginTop: 2,
-    fontWeight: "500",
-  },
-
-  trenner: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: "#DDE1E6",
-  },
-
-  trennerOben: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: "#DDE1E6",
-    marginVertical: 10,
-  },
-
-  infoZeile: {
-    marginBottom: 45,
-  },
-
-  infoLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#8E8E93",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-
-  infoWert: {
-    fontSize: 14,
-    color: "#1a1a1a",
-    lineHeight: 19,
-  },
-
-  tagReihe: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 5,
-  },
-
-  tag: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F4F5F7",
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.9)",
-  },
-
-  tagText: {
-    fontSize: 12,
-    color: "#1a1a1a",
-    fontWeight: "500",
-  },
+  hintergrund: { flex: 1, backgroundColor: SCREEN_BG },
+  profilKnopf: { position: "absolute", right: 20, zIndex: 50 },
+  karteAussen: { alignItems: "center", justifyContent: "center" },
+  karteSchatten: { borderRadius: 0, backgroundColor: CARD_BG, elevation: 0 },
+  karteClip: { flex: 1, overflow: "hidden", backgroundColor: CARD_BG },
+  glasPanel: { position: "absolute", top: 8, bottom: 8, left: 8, borderRadius: 24, overflow: "hidden", backgroundColor: GLASS_BG, zIndex: 2 },
+  glasMilch: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(255,255,255,0.32)" },
+  neuSoft: { shadowColor: "#D8DDE3", shadowOpacity: 0.62, shadowRadius: 5, shadowOffset: { width: 3, height: 3 }, elevation: 3 },
+  neuSoftStrong: { shadowColor: "#D8DDE3", shadowOpacity: 0.9, shadowRadius: 10, shadowOffset: { width: 5, height: 5 }, elevation: 5 },
+  neuSoftInset: { shadowColor: "#BFC5CC", shadowOpacity: 0.35, shadowRadius: 4, shadowOffset: { width: 2, height: 2 }, elevation: 2 },
+  neuMatch: { shadowColor: "#1E9E4A", shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 4, height: 5 }, elevation: 6 },
+  ladeFlaeche: { position: "absolute", left: 0, top: 0, width: "40%", alignItems: "center", justifyContent: "center" },
+  ladeKreis: { width: 88, height: 88, borderRadius: 44, backgroundColor: "#E8F8EE", alignItems: "center", justifyContent: "center" },
+  matchBanner: { position: "absolute", left: 16, right: 16, zIndex: 100 },
+  matchBannerInhalt: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#34C759", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12 },
+  matchBannerTitel: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  matchBannerText: { color: "rgba(255,255,255,0.9)", fontSize: 13, marginTop: 1 },
+  leerContainer: { alignItems: "center", justifyContent: "center", paddingHorizontal: 22 },
+  leerKarte: { width: "100%", maxWidth: 360, height: 320 },
+  leerKarteInnen: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 28, overflow: "hidden", backgroundColor: CARD_BG },
+  leerGlasPanel: { position: "absolute", top: 8, bottom: 8, left: 8, width: "43%", borderRadius: 24, backgroundColor: GLASS_BG },
+  leerTitel: { fontSize: 18, fontWeight: "700", color: TEXT, marginTop: 8 },
+  leerText: { fontSize: 14, color: MUTED, textAlign: "center" },
+  resetKnopf: { marginTop: 16, backgroundColor: "rgba(255,255,255,0.72)", borderRadius: 14, paddingHorizontal: 18, paddingVertical: 10 },
+  resetKnopfText: { color: "#007AFF", fontSize: 15, fontWeight: "600" },
+  zeile: { flexDirection: "row", flex: 1, paddingTop: 16, paddingBottom: 16, zIndex: 3 },
+  vertikalerTrenner: { width: StyleSheet.hairlineWidth, backgroundColor: LINE, alignSelf: "stretch" },
+  infoSpalte: { flex: 1, paddingTop: 4 },
+  bildRahmen: { backgroundColor: "rgba(255,255,255,0.34)", overflow: "hidden" },
+  bildPlatzhalter: { backgroundColor: "rgba(240,240,240,1)", justifyContent: "flex-end", alignItems: "center", overflow: "hidden" },
+  nameText: { fontSize: 26, fontWeight: "700", color: TEXT, letterSpacing: -0.5 },
+  alterText: { fontSize: 15, color: MUTED, marginTop: 2, fontWeight: "500" },
+  trennerOben: { height: StyleSheet.hairlineWidth, backgroundColor: LINE, marginVertical: 10 },
+  infoZeile: { marginBottom: 45 },
+  infoLabel: { fontSize: 11, fontWeight: "700", color: MUTED, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
+  infoWert: { fontSize: 14, color: TEXT, lineHeight: 19 },
+  tagReihe: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
+  tag: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(245,245,245,1)", borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
+  tagText: { fontSize: 12, color: TEXT, fontWeight: "500" },
 });

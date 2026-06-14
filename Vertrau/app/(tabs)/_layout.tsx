@@ -59,7 +59,7 @@ function BlurTabBar({ state, navigation }: BottomTabBarProps) {
         setBarWidth(event.nativeEvent.layout.width);
       }}
     >
-      <BlurView tint="dark" intensity={80} style={StyleSheet.absoluteFill} />
+      <BlurView tint="regular" intensity={60} style={StyleSheet.absoluteFill} />
 
       {tabWidth > 0 && (
         <Animated.View
