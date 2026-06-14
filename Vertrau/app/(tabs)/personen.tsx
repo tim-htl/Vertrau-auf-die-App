@@ -1,34 +1,63 @@
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
   Image,
+  ImageBackground,
   PanResponder,
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   TouchableOpacity,
   useWindowDimensions,
   View,
+  ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { hobbyIcon } from "../../data/hobbies";
 import { DEMO_PERSONEN, type Person } from "../../data/personen";
 import { likePerson, resetSwipes } from "../../data/swipes";
 
+// Put the uploaded image into your project here:
+// assets/images/static-background.jpeg
+// If your screen file is in another folder, adjust this relative path.
+const STATIC_BACKGROUND = require("../../assets/images/pack1.jpg");
+
 const SCREEN_BG = "#FFFFFF";
-const CARD_BG = "#FFFFFF";
-const GLASS_BG = "rgba(255,255,255,0.64)";
+const CARD_BG = "rgba(255,255,255,0.12)";
+const PHOTO_STRIP_GLASS_BG = "#FFFFFF"; // Changed to full opacity
 const TEXT = "#1A1A1A";
 const MUTED = "#8E8E93";
-const LINE = "rgba(35, 35, 35, 0.1)";
+const LINE = "rgba(35, 35, 35, 0.12)";
+
+function AppHintergrund({
+  children,
+  style,
+}: {
+  children?: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <ImageBackground
+      source={STATIC_BACKGROUND}
+      resizeMode="cover"
+      style={[styles.hintergrund, style]}
+      imageStyle={styles.hintergrundBild}
+    >
+      <View pointerEvents="none" style={styles.hintergrundOverlay} />
+      {children}
+    </ImageBackground>
+  );
+}
 
 function BildPlatzhalter({ size }: { size: number }) {
   return (
-    <View style={[styles.bildPlatzhalter, styles.neuSoftInset, { width: size, height: size }]}>
-      <Ionicons name="person" size={size * 0.5} color="#ccc" style={{ marginTop: size * 0.08 }} />
+    <View style={[styles.bildPlatzhalter, styles.neuSoftInset, { width: size, height: size }]}> 
+      <Ionicons name="person" size={size * 0.5} color="#C7C7CC" style={{ marginTop: size * 0.08 }} />
     </View>
   );
 }
@@ -86,7 +115,9 @@ export function PersonenKarte({
 
   const innenBreite = cardBreite - seitenPadding * 2;
   const bildSpalteBreite = innenBreite * 0.34;
-  const glasBreite = seitenPadding + bildSpalteBreite + spaltenGap * 0.75;
+  
+  // Recalculated to stop perfectly at the vertical line
+  const glasBreite = seitenPadding + bildSpalteBreite + spaltenGap;
   const infoSpalteBreite =
     innenBreite - bildSpalteBreite - spaltenGap * 2 - trennerBreite;
 
@@ -98,22 +129,21 @@ export function PersonenKarte({
   const bildKante = Math.min(bildSpalteBreite, bildKanteNachHoehe);
 
   return (
-    <View style={[styles.karteAussen, { width: breite, height: hoehe }]}>
-      <View style={[styles.karteSchatten, { width: cardBreite, height: cardHoehe }]}>
+    <View style={[styles.karteAussen, { width: breite, height: hoehe }]}> 
+      <View style={[styles.karteSchatten, { width: cardBreite, height: cardHoehe }]}> 
         <View style={styles.karteClip}>
-          <View pointerEvents="none" style={[styles.glasPanel, { width: glasBreite }]}>
-            <View style={styles.glasMilch} />
-          </View>
+          {/* Stripped out the BlurView and Glanz since it's solid white now */}
+          <View pointerEvents="none" style={[styles.glasPanel, { width: glasBreite }]} />
 
-          <View style={[styles.zeile, { paddingHorizontal: seitenPadding, gap: spaltenGap }]}>
-            <View style={{ width: bildSpalteBreite, gap: bildAbstand, alignItems: "center" }}>
+          <View style={[styles.zeile, { paddingHorizontal: seitenPadding, gap: spaltenGap }]}> 
+            <View style={{ width: bildSpalteBreite, gap: bildAbstand, alignItems: "center" }}> 
               {person.bilder.slice(0, anzahlBilder).map((bild, i) =>
                 bild ? (
                   <View
                     key={i}
                     style={[styles.bildRahmen, styles.neuSoft, { width: bildKante, height: bildKante }]}
                   >
-                    <Image source={{ uri: bild }} style={{ width: "100%", height: "100%" }} />
+                    <Image source={{ uri: bild }} style={styles.bild} />
                   </View>
                 ) : (
                   <View
@@ -128,7 +158,7 @@ export function PersonenKarte({
 
             <View style={styles.vertikalerTrenner} />
 
-            <View style={[styles.infoSpalte, { width: infoSpalteBreite }]}>
+            <View style={[styles.infoSpalte, { width: infoSpalteBreite }]}> 
               <Text style={styles.nameText} numberOfLines={1}>
                 {person.name}
               </Text>
@@ -225,16 +255,16 @@ function SwipeKarte({
   });
 
   return (
-    <View style={{ width: breite, height: hoehe }}>
+    <View style={{ width: breite, height: hoehe }}> 
       <Animated.View style={[styles.ladeFlaeche, { height: hoehe, opacity: ladung }]} pointerEvents="none">
-        <Animated.View style={[styles.ladeKreis, styles.neuSoftStrong, { transform: [{ scale: ladeSkala }] }]}>
+        <Animated.View style={[styles.ladeKreis, styles.neuSoftStrong, { transform: [{ scale: ladeSkala }] }]}> 
           <Ionicons name="people" size={44} color="#34C759" />
         </Animated.View>
       </Animated.View>
 
       <Animated.View
         {...panResponder.panHandlers}
-        style={{ backgroundColor: SCREEN_BG, transform: [{ translateX }, { rotate: rotation }] }}
+        style={{ backgroundColor: "transparent", transform: [{ translateX }, { rotate: rotation }] }}
       >
         <Pressable onPress={onOeffnen}>
           <PersonenKarte person={person} breite={breite} hoehe={hoehe} />
@@ -259,10 +289,7 @@ export default function PersonenScreen() {
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // Demo immer mit allen Personen starten, nicht nur mit den noch nicht gelikten.
-    // So erscheinen auch die anderen Personen wieder neben Lena Fischer.
     setFeed(DEMO_PERSONEN);
-
     return () => {
       if (bannerTimer.current) clearTimeout(bannerTimer.current);
     };
@@ -276,7 +303,9 @@ export default function PersonenScreen() {
   }
 
   function verbergeMatchBanner() {
-    Animated.timing(bannerY, { toValue: -120, duration: 250, useNativeDriver: true }).start(() => setMatchInfo(null));
+    Animated.timing(bannerY, { toValue: -120, duration: 250, useNativeDriver: true }).start(() =>
+      setMatchInfo(null)
+    );
   }
 
   async function personGeliked(person: Person) {
@@ -290,39 +319,36 @@ export default function PersonenScreen() {
     setFeed(DEMO_PERSONEN);
   }
 
-  if (feed === null) return <View style={styles.hintergrund} />;
+  if (feed === null) return <AppHintergrund />;
 
   if (feed.length === 0) {
     return (
-      <View
+      <AppHintergrund
         style={[
-          styles.hintergrund,
           styles.leerContainer,
           { paddingTop: headerHeight },
         ]}
       >
         <TouchableOpacity
-          style={[styles.profilKnopf, { top: insets.top + 10 }]}
+          style={[styles.profilKnopf, styles.profilKnopfGlas, { top: insets.top + 10 }]}
           onPress={() => router.push("/profil")}
         >
           <Ionicons name="person-circle" size={40} color={TEXT} />
         </TouchableOpacity>
-  
-        <View style={[styles.leerKarte, styles.karteSchatten]}>
+
+        <View style={[styles.leerKarte, styles.karteSchatten]}> 
           <View style={styles.leerKarteInnen}>
+            <BlurView tint="light" intensity={34} style={StyleSheet.absoluteFill} />
             <View style={styles.leerGlasPanel} />
             <Ionicons name="people-outline" size={48} color="#C7C7CC" />
-  
+
             <Text style={styles.leerTitel}>
               für heute warst du genug am Handy :)
             </Text>
-  
+
             <TouchableOpacity
               style={[styles.resetKnopf, styles.neuSoft]}
-              onPress={async () => {
-                await resetSwipes();
-                setFeed(DEMO_PERSONEN);
-              }}
+              onPress={demoZuruecksetzen}
             >
               <Text style={styles.resetKnopfText}>
                 Demo zurücksetzen
@@ -330,13 +356,16 @@ export default function PersonenScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </AppHintergrund>
     );
   }
 
   return (
-    <View style={styles.hintergrund}>
-      <TouchableOpacity style={[styles.profilKnopf, { top: insets.top + 10 }]} onPress={() => router.push("/profil")}>
+    <AppHintergrund>
+      <TouchableOpacity
+        style={[styles.profilKnopf, styles.profilKnopfGlas, { top: insets.top + 10 }]}
+        onPress={() => router.push("/profil")}
+      >
         <Ionicons name="person-circle" size={40} color={TEXT} />
       </TouchableOpacity>
       <FlatList
@@ -347,6 +376,7 @@ export default function PersonenScreen() {
         showsVerticalScrollIndicator={false}
         decelerationRate="fast"
         snapToInterval={karteHoehe}
+        style={styles.liste}
         contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: bottomBarHeight }}
         renderItem={({ item }) => (
           <SwipeKarte
@@ -360,8 +390,14 @@ export default function PersonenScreen() {
         )}
       />
       {matchInfo && (
-        <Animated.View style={[styles.matchBanner, { top: headerHeight + 8, transform: [{ translateY: bannerY }] }]}>
-          <TouchableOpacity style={[styles.matchBannerInhalt, styles.neuMatch]} onPress={() => { verbergeMatchBanner(); router.push(`/chat/${matchInfo.chatId}`); }}>
+        <Animated.View style={[styles.matchBanner, { top: headerHeight + 8, transform: [{ translateY: bannerY }] }]}> 
+          <TouchableOpacity
+            style={[styles.matchBannerInhalt, styles.neuMatch]}
+            onPress={() => {
+              verbergeMatchBanner();
+              router.push(`/chat/${matchInfo.chatId}`);
+            }}
+          >
             <Ionicons name="people" size={22} color="#fff" />
             <View style={{ flex: 1 }}>
               <Text style={styles.matchBannerTitel}>Ihr seid jetzt Freunde! 🎉</Text>
@@ -370,48 +406,284 @@ export default function PersonenScreen() {
           </TouchableOpacity>
         </Animated.View>
       )}
-    </View>
+    </AppHintergrund>
   );
 }
 
 const styles = StyleSheet.create({
-  hintergrund: { flex: 1, backgroundColor: SCREEN_BG },
-  profilKnopf: { position: "absolute", right: 20, zIndex: 50 },
-  karteAussen: { alignItems: "center", justifyContent: "center" },
-  karteSchatten: { borderRadius: 0, backgroundColor: CARD_BG, elevation: 0 },
-  karteClip: { flex: 1, overflow: "hidden", backgroundColor: CARD_BG },
-  glasPanel: { position: "absolute", top: 8, bottom: 8, left: 8, borderRadius: 24, overflow: "hidden", backgroundColor: GLASS_BG, zIndex: 2 },
-  glasMilch: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(255,255,255,0.32)" },
-  neuSoft: { shadowColor: "#D8DDE3", shadowOpacity: 0.62, shadowRadius: 5, shadowOffset: { width: 3, height: 3 }, elevation: 3 },
-  neuSoftStrong: { shadowColor: "#D8DDE3", shadowOpacity: 0.9, shadowRadius: 10, shadowOffset: { width: 5, height: 5 }, elevation: 5 },
-  neuSoftInset: { shadowColor: "#BFC5CC", shadowOpacity: 0.35, shadowRadius: 4, shadowOffset: { width: 2, height: 2 }, elevation: 2 },
-  neuMatch: { shadowColor: "#1E9E4A", shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 4, height: 5 }, elevation: 6 },
-  ladeFlaeche: { position: "absolute", left: 0, top: 0, width: "40%", alignItems: "center", justifyContent: "center" },
-  ladeKreis: { width: 88, height: 88, borderRadius: 44, backgroundColor: "#E8F8EE", alignItems: "center", justifyContent: "center" },
-  matchBanner: { position: "absolute", left: 16, right: 16, zIndex: 100 },
-  matchBannerInhalt: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#34C759", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12 },
-  matchBannerTitel: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  matchBannerText: { color: "rgba(255,255,255,0.9)", fontSize: 13, marginTop: 1 },
-  leerContainer: { alignItems: "center", justifyContent: "center", paddingHorizontal: 22 },
-  leerKarte: { width: "100%", maxWidth: 360, height: 320 },
-  leerKarteInnen: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 28, overflow: "hidden", backgroundColor: CARD_BG },
-  leerGlasPanel: { position: "absolute", top: 8, bottom: 8, left: 8, width: "43%", borderRadius: 24, backgroundColor: GLASS_BG },
-  leerTitel: { fontSize: 18, fontWeight: "700", color: TEXT, marginTop: 8 },
-  leerText: { fontSize: 14, color: MUTED, textAlign: "center" },
-  resetKnopf: { marginTop: 16, backgroundColor: "rgba(255,255,255,0.72)", borderRadius: 14, paddingHorizontal: 18, paddingVertical: 10 },
-  resetKnopfText: { color: "#007AFF", fontSize: 15, fontWeight: "600" },
-  zeile: { flexDirection: "row", flex: 1, paddingTop: 16, paddingBottom: 16, zIndex: 3 },
-  vertikalerTrenner: { width: StyleSheet.hairlineWidth, backgroundColor: LINE, alignSelf: "stretch" },
-  infoSpalte: { flex: 1, paddingTop: 4 },
-  bildRahmen: { backgroundColor: "rgba(255,255,255,0.34)", overflow: "hidden" },
-  bildPlatzhalter: { backgroundColor: "rgba(240,240,240,1)", justifyContent: "flex-end", alignItems: "center", overflow: "hidden" },
-  nameText: { fontSize: 26, fontWeight: "700", color: TEXT, letterSpacing: -0.5 },
-  alterText: { fontSize: 15, color: MUTED, marginTop: 2, fontWeight: "500" },
-  trennerOben: { height: StyleSheet.hairlineWidth, backgroundColor: LINE, marginVertical: 10 },
-  infoZeile: { marginBottom: 45 },
-  infoLabel: { fontSize: 11, fontWeight: "700", color: MUTED, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
-  infoWert: { fontSize: 14, color: TEXT, lineHeight: 19 },
-  tagReihe: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
-  tag: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(245,245,245,1)", borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
-  tagText: { fontSize: 12, color: TEXT, fontWeight: "500" },
+  hintergrund: {
+    flex: 1,
+    backgroundColor: SCREEN_BG,
+  },
+  hintergrundBild: {
+    opacity: 1,
+  },
+  hintergrundOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
+  liste: {
+    backgroundColor: "transparent",
+  },
+  profilKnopf: {
+    position: "absolute",
+    right: 20,
+    zIndex: 50,
+  },
+  profilKnopfGlas: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.34)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.58)",
+    shadowColor: "#9BA6B5",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  karteAussen: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  karteSchatten: {
+    borderRadius: 0,
+    backgroundColor: CARD_BG,
+    elevation: 0,
+  },
+  karteClip: {
+    flex: 1,
+    overflow: "hidden",
+    backgroundColor: "transparent",
+  },
+  glasPanel: {
+    position: "absolute",
+    top: 0,
+    bottom: 0, // Stretches fully to the bottom
+    left: 0,   // Stretches fully to the left edge
+    backgroundColor: PHOTO_STRIP_GLASS_BG,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.66)",
+    shadowColor: "#9BA6B5",
+    shadowOpacity: 0.20,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 7,
+    zIndex: 2,
+  },
+  neuSoft: {
+    shadowColor: "#D8DDE3",
+    shadowOpacity: 0.50,
+    shadowRadius: 7,
+    shadowOffset: { width: 3, height: 3 },
+    elevation: 3,
+  },
+  neuSoftStrong: {
+    shadowColor: "#D8DDE3",
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    shadowOffset: { width: 5, height: 5 },
+    elevation: 5,
+  },
+  neuSoftInset: {
+    shadowColor: "#BFC5CC",
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    shadowOffset: { width: 2, height: 2 },
+    elevation: 2,
+  },
+  neuMatch: {
+    shadowColor: "#1E9E4A",
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 4, height: 5 },
+    elevation: 6,
+  },
+  ladeFlaeche: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    width: "40%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ladeKreis: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: "rgba(232,248,238,0.86)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.62)",
+  },
+  matchBanner: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    zIndex: 100,
+  },
+  matchBannerInhalt: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(52,199,89,0.92)",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  matchBannerTitel: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  matchBannerText: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 13,
+    marginTop: 1,
+  },
+  leerContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 22,
+  },
+  leerKarte: {
+    width: "100%",
+    maxWidth: 360,
+    height: 320,
+  },
+  leerKarteInnen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 28,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.34)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.60)",
+  },
+  leerGlasPanel: {
+    position: "absolute",
+    top: 8,
+    bottom: 8,
+    left: 8,
+    width: "43%",
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.30)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.58)",
+  },
+  leerTitel: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: TEXT,
+    marginTop: 8,
+  },
+  leerText: {
+    fontSize: 14,
+    color: MUTED,
+    textAlign: "center",
+  },
+  resetKnopf: {
+    marginTop: 16,
+    backgroundColor: "rgba(255,255,255,0.58)",
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.62)",
+  },
+  resetKnopfText: {
+    color: "#007AFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  zeile: {
+    flexDirection: "row",
+    flex: 1,
+    paddingTop: 16,
+    paddingBottom: 16,
+    zIndex: 3,
+  },
+  vertikalerTrenner: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: LINE,
+    alignSelf: "stretch",
+  },
+  infoSpalte: {
+    flex: 1,
+    paddingTop: 4,
+  },
+  bildRahmen: {
+    backgroundColor: "rgba(255,255,255,0.36)",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.64)",
+  },
+  bild: {
+    width: "100%",
+    height: "100%",
+  },
+  bildPlatzhalter: {
+    backgroundColor: "rgba(245,245,245,0.50)",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  nameText: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: TEXT,
+    letterSpacing: -0.5,
+  },
+  alterText: {
+    fontSize: 15,
+    color: MUTED,
+    marginTop: 2,
+    fontWeight: "500",
+  },
+  trennerOben: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: LINE,
+    marginVertical: 10,
+  },
+  infoZeile: {
+    marginBottom: 45,
+  },
+  infoLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: MUTED,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  infoWert: {
+    fontSize: 14,
+    color: TEXT,
+    lineHeight: 19,
+  },
+  tagReihe: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+  },
+  tag: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.48)",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.54)",
+  },
+  tagText: {
+    fontSize: 12,
+    color: TEXT,
+    fontWeight: "500",
+  },
 });

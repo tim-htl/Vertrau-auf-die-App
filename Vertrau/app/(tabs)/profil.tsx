@@ -48,7 +48,6 @@ const TAB_BAR_ABSTAND_UNTEN = 24;
 const TAB_BAR_EXTRA_ABSTAND = 20;
 
 const STORAGE_KEY = "profil_v2";
-const ONBOARDING_ABGESCHLOSSEN_KEY = "onboarding_completed";
 
 const MODUL_KATALOG = [
   ...new Set(
@@ -900,7 +899,6 @@ export default function ProfilScreen() {
   const [editModus, setEditModus] = useState(false);
   const [seite, setSeite] = useState(0);
   const [pagerAktiv, setPagerAktiv] = useState(true);
-  const [onboardingAbgeschlossen, setOnboardingAbgeschlossen] = useState(false);
 
   const editProfilRef = useRef<ProfilData>(DEFAULT_PROFIL);
 
@@ -941,32 +939,6 @@ export default function ProfilScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    let istAktiv = true;
-
-    async function onboardingStatusLaden() {
-      try {
-        const abgeschlossen = await AsyncStorage.getItem(
-          ONBOARDING_ABGESCHLOSSEN_KEY
-        );
-
-        if (!istAktiv) {
-          return;
-        }
-
-        setOnboardingAbgeschlossen(abgeschlossen === "true");
-      } catch {
-        setOnboardingAbgeschlossen(false);
-      }
-    }
-
-    onboardingStatusLaden();
-
-    return () => {
-      istAktiv = false;
-    };
-  }, []);
-
   const onProfilAenderung = useCallback((neuesProfil: ProfilData) => {
     editProfilRef.current = neuesProfil;
   }, []);
@@ -998,18 +970,10 @@ export default function ProfilScreen() {
       headerLeft: () => (
         <TouchableOpacity
           activeOpacity={0.7}
-          onPress={() =>
-            onboardingAbgeschlossen
-              ? router.push("/settings")
-              : router.push("/onboarding")
-          }
+          onPress={() => router.push("/onboarding")}
           style={stile.headerLinksButton}
         >
-          <Ionicons
-            name={onboardingAbgeschlossen ? "settings-outline" : "school-outline"}
-            size={20}
-            color="#007AFF"
-          />
+          <Text style={stile.headerLinksText}>Onboarding</Text>
         </TouchableOpacity>
       ),
       headerRight: () => (
@@ -1026,13 +990,7 @@ export default function ProfilScreen() {
         </TouchableOpacity>
       ),
     });
-  }, [
-    editModus,
-    navigation,
-    onboardingAbgeschlossen,
-    router,
-    speichernUndEditModusWechseln,
-  ]);
+  }, [editModus, navigation, router, speichernUndEditModusWechseln]);
 
   if (editModus) {
     return (

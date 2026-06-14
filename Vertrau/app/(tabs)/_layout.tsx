@@ -59,7 +59,7 @@ function BlurTabBar({ state, navigation }: BottomTabBarProps) {
         setBarWidth(event.nativeEvent.layout.width);
       }}
     >
-      <BlurView tint="regular" intensity={60} style={StyleSheet.absoluteFill} />
+      <BlurView tint="light" intensity={60} style={StyleSheet.absoluteFill} />
 
       {tabWidth > 0 && (
         <Animated.View
@@ -97,7 +97,7 @@ function BlurTabBar({ state, navigation }: BottomTabBarProps) {
               <Ionicons
                 name={iconName}
                 size={22}
-                color={focused ? "#0A84FF" : "rgba(255,255,255,0.78)"}
+                color={focused ? "white" : "black"}
               />
             </Pressable>
           );
@@ -137,6 +137,7 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     position: "absolute",
+    borderRadius:50,
     left: 0,
     right: 0,
     bottom: 0,
@@ -156,6 +157,7 @@ const styles = StyleSheet.create({
     height: TAB_BAR_HEIGHT,
     justifyContent: "center",
     alignItems: "center",
+    
   },
 
   activePill: {
