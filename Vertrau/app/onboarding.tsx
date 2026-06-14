@@ -227,7 +227,9 @@ export default function OnboardingScreen() {
           .filter((fa) => fa.antwort.length > 0),
       };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profil));
+await AsyncStorage.setItem("onboarding_completed", "true");
 
+router.replace("/(tabs)/profil");
       // Designer-/Mock-Branch: KEIN echtes Konto. E-Mail + Passwort sind
       // hier nur UI zum Gestalten. Direkt in die App. (Auf dem App-Branch
       // erstellt dieser Schritt stattdessen den Account via signUp.)

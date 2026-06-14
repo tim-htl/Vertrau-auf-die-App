@@ -172,7 +172,7 @@ export default function KurseScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: BG,
+    //backgroundColor: BG,
   },
 
   inhalt: {
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
 
   sektion: {
     borderRadius: 28,
-    backgroundColor: BG,
+    //backgroundColor: BG,
     paddingVertical: 8,
     marginBottom: 28,
 
