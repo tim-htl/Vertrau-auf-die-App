@@ -177,6 +177,14 @@ fi
 api_test "GET /modul/:id" 200 GET "/modul/$MODUL_ID" "" ""
 api_test "GET /modul/INVALID-UUID = 400" 400 GET "/modul/INVALID" "" ""
 
+api_test "GET /hobbies (anon)" 200 GET "/hobbies" "" ""
+api_test "GET /profil-fragen (anon)" 200 GET "/profil-fragen" "" ""
+HOBBY_ID=$(curl -s "$API/hobbies" | python3 -c "import json,sys; h=json.load(sys.stdin)['hobbies']; print(h[0]['id'] if h else '')")
+HOBBY_ID2=$(curl -s "$API/hobbies" | python3 -c "import json,sys; h=json.load(sys.stdin)['hobbies']; print(h[1]['id'] if len(h)>1 else '')")
+FRAGE_ID=$(curl -s "$API/profil-fragen" | python3 -c "import json,sys; f=json.load(sys.stdin)['fragen']; print(f[0]['id'] if f else '')")
+echo "  → erstes Hobby: $HOBBY_ID"
+echo "  → erste Frage: $FRAGE_ID"
+
 # ── 5. /me/kurse — Modul belegen/abwählen ────────────────────────────────────
 
 echo ""
@@ -186,6 +194,20 @@ api_test "GET   /me/kurse (sollte 1 Eintrag)" 200 GET   "/me/kurse"           ""
 api_test "POST  /me/kurse erneut (Upsert, kein 409)" 200 POST "/me/kurse"     "{\"modulId\":\"$MODUL_ID\",\"semester\":4}" "$TOKEN"
 api_test "DELETE /me/kurse/:id (idempotent)" 204 DELETE "/me/kurse/$MODUL_ID" ""                                          "$TOKEN"
 api_test "DELETE /me/kurse/:id erneut (idempotent, 204)" 204 DELETE "/me/kurse/$MODUL_ID" ""                              "$TOKEN"
+
+# ── 5b. /me/hobbies + /me/fragen ─────────────────────────────────────────────
+
+echo ""
+echo "${BOLD}== 5b. /me/hobbies + /me/fragen ==${RESET}"
+api_test "PUT /me/hobbies (setzen)"                200 PUT "/me/hobbies" "{\"hobbyIds\":[\"$HOBBY_ID\",\"$HOBBY_ID2\"]}" "$TOKEN"
+api_test "PUT /me/hobbies (leeren, idempotent)"    200 PUT "/me/hobbies" '{"hobbyIds":[]}'                              "$TOKEN"
+api_test "PUT /me/hobbies (ungültige UUID = 400)"  400 PUT "/me/hobbies" '{"hobbyIds":["nope"]}'                        "$TOKEN"
+api_test "PUT /me/hobbies ohne Token = 401"        401 PUT "/me/hobbies" '{"hobbyIds":[]}'                              ""
+api_test "PUT /me/fragen (setzen)"                 200 PUT "/me/fragen"  "{\"antworten\":[{\"frageId\":\"$FRAGE_ID\",\"antwort\":\"E2E-Antwort\"}]}" "$TOKEN"
+api_test "PUT /me/fragen (leeren, idempotent)"     200 PUT "/me/fragen"  '{"antworten":[]}'                             "$TOKEN"
+LANG_ANTWORT=$(python3 -c "print('A'*201)")
+api_test "PUT /me/fragen (>200 Zeichen = 400)"     400 PUT "/me/fragen"  "{\"antworten\":[{\"frageId\":\"$FRAGE_ID\",\"antwort\":\"$LANG_ANTWORT\"}]}" "$TOKEN"
+api_test "PUT /me/fragen ohne Token = 401"         401 PUT "/me/fragen"  '{"antworten":[]}'                             ""
 
 # ── 6. /personen ─────────────────────────────────────────────────────────────
 
