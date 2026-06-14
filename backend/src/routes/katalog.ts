@@ -182,4 +182,25 @@ export async function katalogRoutes(app: FastifyInstance) {
       },
     };
   });
+
+  // GET /hobbies — Hobby-Katalog (nur aktive), für Onboarding/Profil-Auswahl.
+  // icon = Ionicons-Name, vom Frontend direkt renderbar.
+  app.get("/hobbies", async () => {
+    const hobbies = await prisma.hobby.findMany({
+      where: { aktiv: true },
+      orderBy: [{ sortierung: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, icon: true },
+    });
+    return { hobbies };
+  });
+
+  // GET /profil-fragen — Katalog der "witzigen" Profil-Fragen (nur aktive).
+  app.get("/profil-fragen", async () => {
+    const fragen = await prisma.profilFrage.findMany({
+      where: { aktiv: true },
+      orderBy: [{ sortierung: "asc" }],
+      select: { id: true, text: true },
+    });
+    return { fragen };
+  });
 }
