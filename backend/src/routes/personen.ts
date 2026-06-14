@@ -37,12 +37,26 @@ export const personProjection = {
       },
     },
   },
+  hobbies: {
+    select: {
+      hobby: { select: { id: true, name: true, icon: true } },
+    },
+  },
+  frageAntworten: {
+    orderBy: { position: "asc" },
+    select: {
+      frageId: true,
+      antwort: true,
+      position: true,
+      frage: { select: { text: true } },
+    },
+  },
 } satisfies Prisma.ProfileInclude;
 
 export type PersonRow = Prisma.ProfileGetPayload<{ include: typeof personProjection }>;
 
 export function formatPerson(profile: PersonRow) {
-  const { geburtsdatum, studiengang, belegteModule, ...rest } = profile;
+  const { geburtsdatum, studiengang, belegteModule, hobbies, frageAntworten, ...rest } = profile;
   return {
     ...rest,
     alter: alterFromGeburtsdatum(geburtsdatum),
@@ -57,6 +71,17 @@ export function formatPerson(profile: PersonRow) {
       name: u.modul.name,
       ects: u.modul.ects,
       semester: u.semester,
+    })),
+    hobbies: hobbies.map((h) => ({
+      id: h.hobby.id,
+      name: h.hobby.name,
+      icon: h.hobby.icon,
+    })),
+    frageAntworten: frageAntworten.map((fa) => ({
+      frageId: fa.frageId,
+      text: fa.frage.text,
+      antwort: fa.antwort,
+      position: fa.position,
     })),
   };
 }

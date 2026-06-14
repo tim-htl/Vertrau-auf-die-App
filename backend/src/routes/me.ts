@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { alterToGeburtsdatum, formatProfileForClient } from "../lib/profile.js";
+import { alterToGeburtsdatum } from "../lib/profile.js";
+import { formatPerson, personProjection } from "./personen.js";
 
 const updateMeSchema = z
   .object({
@@ -19,7 +20,10 @@ const updateMeSchema = z
 export async function meRoutes(app: FastifyInstance) {
   app.get("/me", async (req) => {
     const user = await app.requireAuth(req);
-    const profile = await prisma.profile.findUnique({ where: { id: user.id } });
+    const profile = await prisma.profile.findUnique({
+      where: { id: user.id },
+      include: personProjection,
+    });
 
     if (!profile) {
       const err = new Error("Profile not found. Call POST /auth/sync first.");
@@ -27,7 +31,7 @@ export async function meRoutes(app: FastifyInstance) {
       throw err;
     }
 
-    return { profile: formatProfileForClient(profile) };
+    return { profile: formatPerson(profile) };
   });
 
   app.patch("/me", async (req) => {
@@ -51,8 +55,9 @@ export async function meRoutes(app: FastifyInstance) {
     const profile = await prisma.profile.update({
       where: { id: user.id },
       data,
+      include: personProjection,
     });
 
-    return { profile: formatProfileForClient(profile) };
+    return { profile: formatPerson(profile) };
   });
 }
