@@ -31,6 +31,19 @@ export type Coordinates = { lat: number; lng: number };
 
 // ── Profile / Me ────────────────────────────────────────────────────────────
 
+// Gemeinsame Sub-Strukturen von Me und Person (gleiches reiches Shape aus
+// formatPerson im Backend).
+export type UniRef = { id: UUID; name: string; kuerzel: string };
+export type StudiengangRef = { id: UUID; name: string; abschluss: Abschluss };
+export type ProfilModul = { id: UUID; name: string; ects: number | null; semester: number | null };
+export type ProfilHobby = { id: UUID; name: string; icon: string };
+export type ProfilFrageAntwort = {
+  frageId: UUID;
+  text: string;
+  antwort: string;
+  position: number;
+};
+
 export type Me = {
   id: UUID;
   role: Role;
@@ -38,10 +51,13 @@ export type Me = {
   alter: number | null;
   kurzbeschreibung: string | null;
   bilder: string[];
-  // hobbies: seit dem Hobby-Katalog (user_hobbies) nicht mehr Teil des
-  // Profile-Records; kommen in Phase 4d als eigene Struktur dazu.
   studiengangId: UUID | null;
   uniVerified: boolean;
+  uni: UniRef | null;
+  studiengang: StudiengangRef | null;
+  module: ProfilModul[];
+  hobbies: ProfilHobby[];
+  frageAntworten: ProfilFrageAntwort[];
   createdAt: ISODateTime;
   updatedAt: ISODateTime;
 };
@@ -130,11 +146,12 @@ export type Person = {
   alter: number | null;
   kurzbeschreibung: string | null;
   bilder: string[];
-  // hobbies: siehe Me — folgt in Phase 4d über user_hobbies
   uniVerified: boolean;
-  uni: { id: UUID; name: string; kuerzel: string } | null;
-  studiengang: { id: UUID; name: string; abschluss: Abschluss } | null;
-  module: { id: UUID; name: string; ects: number | null; semester: number | null }[];
+  uni: UniRef | null;
+  studiengang: StudiengangRef | null;
+  module: ProfilModul[];
+  hobbies: ProfilHobby[];
+  frageAntworten: ProfilFrageAntwort[];
   createdAt: ISODateTime;
   updatedAt: ISODateTime;
 };
@@ -331,4 +348,19 @@ export type GetUploadUrlResponse = {
   uploadUrl: string;
   token: string;
   publicUrl: string | null;
+};
+
+// ── Hobbies / Profil-Fragen (Katalog + Speichern) ────────────────────────────
+
+export type HobbyKatalogEintrag = { id: UUID; name: string; icon: string };
+export type GetHobbiesResponse = { hobbies: HobbyKatalogEintrag[] };
+export type PutHobbiesResponse = { hobbyIds: UUID[] };
+
+export type ProfilFrageKatalogEintrag = { id: UUID; text: string };
+export type GetProfilFragenResponse = { fragen: ProfilFrageKatalogEintrag[] };
+export type PutFragenBody = {
+  antworten: { frageId: UUID; antwort: string }[];
+};
+export type PutFragenResponse = {
+  antworten: { frageId: UUID; antwort: string; position: number }[];
 };

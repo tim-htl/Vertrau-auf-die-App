@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { formatProfileForClient } from "../lib/profile.js";
+import { formatPerson, personProjection } from "./personen.js";
 
 const syncBodySchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
@@ -31,8 +31,9 @@ export async function authRoutes(app: FastifyInstance) {
         id: user.id,
         name: desiredName,
       },
+      include: personProjection,
     });
 
-    return { profile: formatProfileForClient(profile) };
+    return { profile: formatPerson(profile) };
   });
 }
