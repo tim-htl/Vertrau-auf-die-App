@@ -1,8 +1,8 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -23,38 +23,19 @@ import {
   MAX_ANTWORT_LAENGE,
   MAX_FRAGEN,
   PROFIL_FRAGEN,
-  type FrageAntwort,
 } from "../../data/fragen";
 import { HOBBY_KATALOG, hobbyIcon } from "../../data/hobbies";
-import { alleModule, DEMO_STUDIENGANG } from "../../data/kurse";
+import { ladeMeinProfil, speichereMeinProfil, type ProfilData } from "../../api/profil";
 import { signOut } from "../../lib/supabase";
 import { resetSwipes } from "../../data/swipes";
 
-// Modul-Namen aus der Moduldatenbank des Studiengangs (dedupliziert) —
-// Module werden daraus gewählt, nicht mehr frei eingetippt.
-const MODUL_KATALOG = [...new Set(alleModule(DEMO_STUDIENGANG.moduldatenbank).map((m) => m.name))];
-
-// ─── Typen & Standardwerte ────────────────────────────────────────────────────
+// ─── Standardwerte ────────────────────────────────────────────────────────────
 
 // 10 Bild-Slots: die ersten 5 erscheinen auch auf der Profilkarte (KP),
 // alle 10 in der ausführlichen Ansicht (AP) — ein gemeinsames Array,
 // keine getrennten Listen.
 const MAX_BILDER = 10;
 const KP_BILDER = 5;
-
-type ProfilData = {
-  // Nicht bearbeitbar
-  name: string;
-  alter: string;
-  studiengang: string;
-  uni: string;
-  // Bearbeitbar
-  bilder: (string | null)[];
-  bio: string;
-  hobbies: string[];
-  module: string[];
-  frageAntworten: FrageAntwort[];
-};
 
 const DEFAULT_PROFIL: ProfilData = {
   name: "Dein Name",
@@ -67,8 +48,6 @@ const DEFAULT_PROFIL: ProfilData = {
   module: [],
   frageAntworten: [],
 };
-
-const STORAGE_KEY = "profil_v2";
 
 // ─── Hilfsfunktion: Bild auswählen ───────────────────────────────────────────
 
@@ -206,8 +185,6 @@ function ProfilBearbeiten({
   const [frageAuswahlOffen, setFrageAuswahlOffen] = useState(false);
   const [hobbyAuswahlOffen, setHobbyAuswahlOffen] = useState(false);
   const [hobbySuche, setHobbySuche] = useState("");
-  const [modulAuswahlOffen, setModulAuswahlOffen] = useState(false);
-  const [modulSuche, setModulSuche] = useState("");
 
   function onChange(neu: ProfilData) {
     setProfil(neu);
@@ -237,24 +214,11 @@ function ProfilBearbeiten({
     onChange({ ...profil, hobbies: profil.hobbies.filter((_, idx) => idx !== i) });
   }
 
-  function modulHinzufuegen(name: string) {
-    onChange({ ...profil, module: [...profil.module, name] });
-  }
-
-  function modulEntfernen(i: number) {
-    onChange({ ...profil, module: profil.module.filter((_, idx) => idx !== i) });
-  }
-
-  // Auswahl-Listen: noch nicht gewählte Einträge, optional per Suche gefiltert
+  // Auswahl-Liste: noch nicht gewählte Hobbies, optional per Suche gefiltert
   const verfuegbareHobbies = HOBBY_KATALOG.filter(
     (h) =>
       !profil.hobbies.includes(h.name) &&
       h.name.toLowerCase().includes(hobbySuche.trim().toLowerCase())
-  );
-  const verfuegbareModule = MODUL_KATALOG.filter(
-    (m) =>
-      !profil.module.includes(m) &&
-      m.toLowerCase().includes(modulSuche.trim().toLowerCase())
   );
 
   function frageHinzufuegen(frageId: string) {
@@ -489,62 +453,21 @@ function ProfilBearbeiten({
           )}
         </View>
 
-        {/* Module: Auswahl aus der Moduldatenbank des Studiengangs */}
+        {/* Module: read-only — Bearbeitung läuft über den Kurse-Tab */}
         <Text style={stile.editSektionTitel}>Module</Text>
         <View style={stile.editSektion}>
-          {profil.module.length > 0 && (
+          {profil.module.length > 0 ? (
             <View style={stile.tagReiheEdit}>
               {profil.module.map((m, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={stile.tagEdit}
-                  onPress={() => modulEntfernen(i)}
-                >
+                <View key={i} style={stile.tagEdit}>
                   <Text style={stile.tagEditText}>{m}</Text>
-                  <Ionicons name="close" size={12} color="#666" style={{ marginLeft: 4 }} />
-                </TouchableOpacity>
+                </View>
               ))}
             </View>
+          ) : (
+            <Text style={stile.keineTreffer}>Noch keine Module.</Text>
           )}
-          <TouchableOpacity
-            style={stile.frageHinzufuegenKnopf}
-            onPress={() => setModulAuswahlOffen((v) => !v)}
-          >
-            <Ionicons
-              name={modulAuswahlOffen ? "chevron-up" : "add"}
-              size={18}
-              color="#007AFF"
-            />
-            <Text style={stile.frageHinzufuegenText}>
-              {modulAuswahlOffen ? "Auswahl schließen" : "Modul hinzufügen"}
-            </Text>
-          </TouchableOpacity>
-          {modulAuswahlOffen && (
-            <>
-              <TextInput
-                style={stile.sucheInput}
-                value={modulSuche}
-                onChangeText={setModulSuche}
-                placeholder="Moduldatenbank durchsuchen…"
-                placeholderTextColor="#aaa"
-                autoCorrect={false}
-              />
-              <View style={stile.tagReiheEdit}>
-                {verfuegbareModule.map((m) => (
-                  <TouchableOpacity
-                    key={m}
-                    style={stile.tagAuswahl}
-                    onPress={() => modulHinzufuegen(m)}
-                  >
-                    <Text style={stile.tagEditText}>{m}</Text>
-                  </TouchableOpacity>
-                ))}
-                {verfuegbareModule.length === 0 && (
-                  <Text style={stile.keineTreffer}>Keine Treffer.</Text>
-                )}
-              </View>
-            </>
-          )}
+          <Text style={stile.editHinweis}>Deine Module verwaltest du im Kurse-Tab.</Text>
         </View>
 
         {/* Nicht bearbeitbare Felder (Info) */}
@@ -586,33 +509,22 @@ export default function ProfilScreen() {
   // sonst frisst der Pager dessen horizontale Swipes (Gesten-Konflikt
   // zweier verschachtelter horizontaler ScrollViews).
   const [pagerAktiv, setPagerAktiv] = useState(true);
+  const [speichert, setSpeichert] = useState(false);
   const editProfilRef = useRef<ProfilData>(profil);
 
-  // Profil bei jedem Fokus laden (damit das Ergebnis aus dem Onboarding
-  // beim Zurückkehren sofort erscheint). Ältere Profile haben nur 5
-  // Bild-Slots und keine frageAntworten — beim Laden aufs neue Format
-  // auffüllen. Kein gespeichertes Profil → Onboarding-Einstieg.
+  // Profil bei jedem Fokus aus dem Backend laden (GET /me) — damit das
+  // Ergebnis aus dem Onboarding bzw. Änderungen aus dem Kurse-Tab beim
+  // Zurückkehren sofort erscheinen. 404/Fehler → Onboarding-Einstieg.
   useFocusEffect(
     useCallback(() => {
       if (editModus) return; // im Edit nicht überschreiben
-      AsyncStorage.getItem(STORAGE_KEY).then((data) => {
-        if (data) {
-          const geladen = JSON.parse(data);
-          const bilder: (string | null)[] = [...(geladen.bilder ?? [])];
-          while (bilder.length < MAX_BILDER) bilder.push(null);
-          const voll: ProfilData = {
-            ...DEFAULT_PROFIL,
-            ...geladen,
-            bilder,
-            frageAntworten: geladen.frageAntworten ?? [],
-          };
-          setProfil(voll);
-          editProfilRef.current = voll;
+      ladeMeinProfil()
+        .then((p) => {
+          setProfil(p);
+          editProfilRef.current = p;
           setHatProfil(true);
-        } else {
-          setHatProfil(false);
-        }
-      });
+        })
+        .catch(() => setHatProfil(false));
     }, [editModus])
   );
 
@@ -624,11 +536,8 @@ export default function ProfilScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            // Mock-first-Reset: ohne echtes Profil-Backend liegt alles lokal.
-            // Beim Abmelden zurücksetzen, damit der nächste Onboarding-
-            // Durchlauf sauber bei null startet (sonst würde das alte
-            // Mock-Profil den neuen User "übernehmen").
-            await AsyncStorage.removeItem(STORAGE_KEY);
+            // Swipe-Likes sind noch Mock (bis 4e) → lokal zurücksetzen.
+            // Das Profil selbst liegt im Backend und bleibt bestehen.
             await resetSwipes();
             await signOut();
             // Session weg → AuthGate im RootLayout wechselt zum Login-Screen.
@@ -653,34 +562,52 @@ export default function ProfilScreen() {
           <Ionicons name="log-out-outline" size={22} color="#FF3B30" />
         </TouchableOpacity>
       ),
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={async () => {
-            if (editModus) {
-              // Speichern — Fragen ohne geschriebene Antwort fliegen raus
-              const bereinigt: ProfilData = {
-                ...editProfilRef.current,
-                frageAntworten: editProfilRef.current.frageAntworten
-                  .map((fa) => ({ ...fa, antwort: fa.antwort.trim() }))
-                  .filter((fa) => fa.antwort.length > 0),
-              };
-              editProfilRef.current = bereinigt;
-              await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(bereinigt));
-              setProfil(bereinigt);
-            }
-            setEditModus((v) => !v);
-          }}
-          style={{ marginRight: 4 }}
-        >
-          <Ionicons
-            name={editModus ? "checkmark" : "pencil"}
-            size={editModus ? 22 : 20}
-            color="#007AFF"
-          />
-        </TouchableOpacity>
-      ),
+      headerRight: () =>
+        speichert ? (
+          <ActivityIndicator color="#007AFF" style={{ marginRight: 8 }} />
+        ) : (
+          <TouchableOpacity
+            onPress={async () => {
+              if (editModus) {
+                // Speichern — Fragen ohne geschriebene Antwort fliegen raus
+                const bereinigt: ProfilData = {
+                  ...editProfilRef.current,
+                  frageAntworten: editProfilRef.current.frageAntworten
+                    .map((fa) => ({ ...fa, antwort: fa.antwort.trim() }))
+                    .filter((fa) => fa.antwort.length > 0),
+                };
+                setSpeichert(true);
+                try {
+                  await speichereMeinProfil(bereinigt);
+                  // Frisch aus dem Backend laden → kanonischer Stand
+                  // (hochgeladene Bild-URLs statt lokaler file://-Pfade).
+                  const aktuell = await ladeMeinProfil();
+                  editProfilRef.current = aktuell;
+                  setProfil(aktuell);
+                  setEditModus(false);
+                } catch (e) {
+                  Alert.alert(
+                    "Fehler",
+                    e instanceof Error ? e.message : "Speichern fehlgeschlagen."
+                  );
+                } finally {
+                  setSpeichert(false);
+                }
+              } else {
+                setEditModus(true);
+              }
+            }}
+            style={{ marginRight: 4 }}
+          >
+            <Ionicons
+              name={editModus ? "checkmark" : "pencil"}
+              size={editModus ? 22 : 20}
+              color="#007AFF"
+            />
+          </TouchableOpacity>
+        ),
     });
-  }, [editModus, navigation, hatProfil]);
+  }, [editModus, navigation, hatProfil, speichert]);
 
   function onProfilAenderung(neuesDaten: ProfilData) {
     editProfilRef.current = neuesDaten;
