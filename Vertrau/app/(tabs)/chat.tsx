@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { INITIAL_CHATS, type ChatItem, type Message } from "../../data/chats";
 import { ladeJoinedAktivitaeten } from "../../data/joined";
@@ -80,6 +81,7 @@ function Trennlinie() {
 
 export default function ChatScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [letzteNachrichten, setLetzteNachrichten] = useState<Record<string, string>>({});
   const [alleChats, setAlleChats] = useState<ChatItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -132,8 +134,8 @@ export default function ChatScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Minimalistischer Header */}
-        <View style={styles.header}>
+        {/* Minimalistischer Header mit SafeArea padding */}
+        <View style={[styles.header, { paddingTop: Math.max(insets.top + 16, 40) }]}>
           <Text style={styles.headerTitle}>Chats</Text>
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={18} color="#666" style={styles.searchIcon} />
@@ -181,7 +183,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
     paddingHorizontal: 20,
     paddingBottom: 16,
   },

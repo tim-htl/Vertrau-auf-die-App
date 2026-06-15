@@ -102,7 +102,6 @@ export function PhotoStripCard({
   const cardBreite = width;
   const cardHoehe = cardHeight;
 
-  // Exakte Layout-Werte aus der ursprünglichen PersonenKarte
   const seitenPadding = 18;
   const stripLinksAbstand = 10;
   const stripRechtsPadding = 10;
@@ -115,17 +114,19 @@ export function PhotoStripCard({
   const infoSpalteBreite = innenBreite - bildSpalteBreite - spaltenGap;
 
   const anzahlBilder = 5;
-  const bildAbstand = 8;
-  const verfuegbarFuerBilder = cardHoehe - 34;
-  const bildKanteNachHoehe =
-    (verfuegbarFuerBilder - bildAbstand * (anzahlBilder - 1)) / anzahlBilder;
-  const bildKante = Math.min(bildSpalteBreite, bildKanteNachHoehe);
+  const bildAbstand = 4; // Bilder enger zusammen
+  const vertikalerPadding = 26; // Mehr Abstand oben und unten
+  const verfuegbarFuerBilder = cardHoehe - (vertikalerPadding * 2);
+  
+  const bildKante = Math.min(
+    bildSpalteBreite, 
+    (verfuegbarFuerBilder - (bildAbstand * (anzahlBilder - 1))) / anzahlBilder
+  );
 
   return (
     <View style={[stile.karteAussen, { width: cardBreite, height: cardHoehe }]}>
       <View style={[stile.karteSchatten, { width: cardBreite, height: cardHoehe }]}>
         <View style={stile.karteClip}>
-          {/* Das schöne Blur-Panel aus dem Personen-Screen */}
           <BlurView
             pointerEvents="none"
             tint="light"
@@ -139,7 +140,8 @@ export function PhotoStripCard({
             <View
               style={{
                 width: bildSpalteBreite,
-                gap: bildAbstand,
+                paddingVertical: vertikalerPadding, // Neuer Abstand
+                justifyContent: "space-between", 
                 alignItems: "center",
               }}
             >
@@ -202,17 +204,11 @@ const stile = StyleSheet.create({
     top: 0,
     bottom: 0,
     overflow: "hidden",
-    borderRadius: 24,
+    borderRadius: 0,
     backgroundColor: "rgba(255, 255, 255, 0.4)",
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
     borderLeftWidth: 1,
     borderRightWidth: 0,
     borderColor: "white",
-    shadowColor: "#FFFFFF",
-    shadowOpacity: 0.22,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 8 },
     elevation: 0,
     zIndex: 2,
   },
@@ -250,6 +246,7 @@ const stile = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.64)",
+    borderRadius: 16,
   },
   bild: {
     width: "100%",

@@ -273,8 +273,8 @@ export default function PersonenScreen() {
 
 const styles = StyleSheet.create({
   hintergrund: { flex: 1, backgroundColor: SCREEN_BG },
-  hintergrundBild: { opacity: 1 },
-  hintergrundOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(255,255,255,0.16)" },
+  hintergrundBild: { opacity: 100 },
+  //hintergrundOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(255,255,255,0.16)" },
   
   liste: { backgroundColor: "transparent" },
   karteSchatten: { borderRadius: 0, backgroundColor: CARD_BG, elevation: 0 },
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   
   leerContainer: { alignItems: "center", justifyContent: "center", paddingHorizontal: 22 },
   leerKarte: { width: "100%", maxWidth: 360, height: 320 },
-  leerKarteInnen: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 28, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.34)", borderWidth: 1, borderColor: "rgba(255,255,255,0.60)" },
+  leerKarteInnen: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 0, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.34)", borderWidth: 1, borderColor: "rgba(255,255,255,0.60)" },
   leerGlasPanel: { position: "absolute", top: 8, bottom: 8, left: 8, width: "43%", borderRadius: 24, backgroundColor: "rgba(255,255,255,0.30)", borderWidth: 1, borderColor: "rgba(255,255,255,0.58)" },
   leerTitel: { fontSize: 18, fontWeight: "700", color: TEXT, marginTop: 8 },
   leerText: { fontSize: 14, color: MUTED, textAlign: "center" },
