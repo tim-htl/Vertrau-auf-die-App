@@ -43,21 +43,15 @@ type ModulBereichItem = {
   bereiche?: ModulBereichItem[];
 };
 
-function UniLogo({ uri, text }: { uri: string | null; text: string }) {
-  if (uri) {
-    return <Image source={{ uri }} style={styles.uniLogo} />;
-  }
-
-  const initialen = text
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
+// Das hochgeladene TU Logo wird nun hier fest eingebunden
+function UniLogo() {
   return (
     <View style={[styles.uniLogo, styles.uniLogoPlatzhalter]}>
-      <Text style={styles.uniLogoText}>{initialen}</Text>
+      <Image 
+        source={require("../../assets/images/TUB.png")} 
+        style={styles.tuLogoImage} 
+        resizeMode="contain"
+      />
     </View>
   );
 }
@@ -96,12 +90,8 @@ function TeilnehmerAvatare({ teilnehmer }: { teilnehmer?: Teilnehmer[] }) {
 
 function StudiengangKarte({
   name,
-  uni,
-  uniLogo,
 }: {
   name: string;
-  uni: string;
-  uniLogo: string | null;
 }) {
   const { width } = useWindowDimensions();
   const cardWidth = width - 36;
@@ -118,22 +108,19 @@ function StudiengangKarte({
 
           <View style={styles.topBar}>
             <Text style={styles.logo}>KURSE</Text>
-            <UniLogo uri={uniLogo} text={uni} />
+            <UniLogo />
           </View>
-
-          <View style={styles.heroBottom}>
-            <Text style={styles.kicker} numberOfLines={2}>
-              {uni}
-            </Text>
-
-            <View style={styles.cta}>
-              <Text style={styles.ctaText}>ÜBERSICHT</Text>
-            </View>
-          </View>
+          
+          {/* Der Bereich heroBottom mit 'TU Berlin' und 'ÜBERSICHT' wurde hier entfernt */}
         </ImageBackground>
 
         <View style={styles.content}>
-          <Text style={styles.title} numberOfLines={3}>
+          <Text 
+            style={styles.title} 
+            numberOfLines={1} 
+            adjustsFontSizeToFit 
+            minimumFontScale={0.5}
+          >
             {name}
           </Text>
 
@@ -326,8 +313,6 @@ export default function KurseScreen() {
       >
         <StudiengangKarte
           name={studiengang.name}
-          uni={studiengang.uni}
-          uniLogo={studiengang.uniLogo}
         />
 
         <SammelKarte
@@ -424,7 +409,7 @@ const styles = StyleSheet.create({
   },
 
   headerCard: {
-    minHeight: 360,
+    minHeight: 280, // Die Höhe leicht verringert, da wir unten die Bar entfernt haben (war 360)
   },
 
   headerHero: {
@@ -469,6 +454,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderWidth: 2,
     borderColor: CARD_BG,
+    overflow: "hidden", // Damit das Bild bei eventuellem Überlappen nicht über den Kreis ragt
   },
 
   uniLogoPlatzhalter: {
@@ -476,57 +462,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  uniLogoText: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: BLACK,
-  },
-
-  heroBottom: {
-    position: "absolute",
-    left: 18,
-    right: 18,
-    bottom: 0,
-    minHeight: 82,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    backgroundColor: CARD_BG,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  kicker: {
-    flex: 1,
-    color: "#fa7d7d",
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "500",
-    marginRight: 14,
-  },
-
-  cta: {
-    height: 54,
-    borderRadius: 28,
-    backgroundColor: "#fff",
-    paddingHorizontal: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "blue",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-
-  ctaText: {
-    color: "#111",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.3,
+  tuLogoImage: {
+    width: 44,
+    height: 44,
   },
 
   content: {
