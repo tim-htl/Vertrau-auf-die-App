@@ -1,5 +1,5 @@
 import * as ImagePicker from "expo-image-picker";
-import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import { useFocusEffect, useNavigation } from "expo-router";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -26,6 +26,8 @@ import {
 } from "../../data/fragen";
 import { HOBBY_KATALOG, hobbyIcon } from "../../data/hobbies";
 import { ladeMeinProfil, speichereMeinProfil, type ProfilData } from "../../api/profil";
+import { authSync } from "../../api/me";
+import { ApiError } from "../../lib/api";
 import { signOut } from "../../lib/supabase";
 import { resetSwipes } from "../../data/swipes";
 
@@ -497,12 +499,10 @@ function ProfilBearbeiten({
 
 export default function ProfilScreen() {
   const navigation = useNavigation();
-  const router = useRouter();
   const { width } = useWindowDimensions();
   const [profil, setProfil] = useState<ProfilData>(DEFAULT_PROFIL);
-  // null = lädt noch, false = noch kein Profil (→ Onboarding-Einstieg),
-  // true = Profil vorhanden
-  const [hatProfil, setHatProfil] = useState<boolean | null>(null);
+  // "laedt" = GET /me läuft, "ok" = Profil da, "fehler" = nicht erreichbar
+  const [ladeStatus, setLadeStatus] = useState<"laedt" | "ok" | "fehler">("laedt");
   const [editModus, setEditModus] = useState(false);
   const [seite, setSeite] = useState(0);
   // false, solange der Finger auf dem Bilder-Carousel der AP liegt —
@@ -512,20 +512,42 @@ export default function ProfilScreen() {
   const [speichert, setSpeichert] = useState(false);
   const editProfilRef = useRef<ProfilData>(profil);
 
-  // Profil bei jedem Fokus aus dem Backend laden (GET /me) — damit das
-  // Ergebnis aus dem Onboarding bzw. Änderungen aus dem Kurse-Tab beim
-  // Zurückkehren sofort erscheinen. 404/Fehler → Onboarding-Einstieg.
-  useFocusEffect(
-    useCallback(() => {
-      if (editModus) return; // im Edit nicht überschreiben
-      ladeMeinProfil()
-        .then((p) => {
+  // Profil aus dem Backend laden (GET /me). Bei 404 (eingeloggt, aber noch
+  // kein Profil-Record) wird es per authSync idempotent angelegt und erneut
+  // geladen. Jeder andere Fehler (z. B. Server nicht erreichbar) → Fehler-
+  // zustand mit "Erneut versuchen" statt Sackgasse.
+  const ladeProfil = useCallback(async () => {
+    setLadeStatus("laedt");
+    try {
+      const p = await ladeMeinProfil();
+      setProfil(p);
+      editProfilRef.current = p;
+      setLadeStatus("ok");
+    } catch (e) {
+      if (e instanceof ApiError && e.statusCode === 404) {
+        try {
+          await authSync();
+          const p = await ladeMeinProfil();
           setProfil(p);
           editProfilRef.current = p;
-          setHatProfil(true);
-        })
-        .catch(() => setHatProfil(false));
-    }, [editModus])
+          setLadeStatus("ok");
+          return;
+        } catch {
+          setLadeStatus("fehler");
+          return;
+        }
+      }
+      setLadeStatus("fehler");
+    }
+  }, []);
+
+  // Bei jedem Fokus neu laden — damit Onboarding-/Kurse-Tab-Änderungen beim
+  // Zurückkehren sofort erscheinen. Im Edit-Modus nicht überschreiben.
+  useFocusEffect(
+    useCallback(() => {
+      if (editModus) return;
+      ladeProfil();
+    }, [editModus, ladeProfil])
   );
 
   function abmelden() {
@@ -549,20 +571,20 @@ export default function ProfilScreen() {
     ]);
   }
 
-  // Header-Button dynamisch setzen — nur wenn ein Profil existiert
-  // (im Onboarding-Einstieg keine Edit-/Abmelden-Buttons).
+  // Abmelden-Button IMMER verfügbar (auch im Fehler-/Lade-Zustand), damit
+  // man nie feststeckt. Edit-/Speichern-Button nur, wenn ein Profil geladen
+  // ist.
   useLayoutEffect(() => {
-    if (!hatProfil) {
-      navigation.setOptions({ headerLeft: undefined, headerRight: undefined });
-      return;
-    }
     navigation.setOptions({
       headerLeft: () => (
         <TouchableOpacity onPress={abmelden} style={{ marginLeft: 4 }}>
           <Ionicons name="log-out-outline" size={22} color="#FF3B30" />
         </TouchableOpacity>
       ),
-      headerRight: () =>
+      headerRight:
+        ladeStatus !== "ok"
+          ? undefined
+          : () =>
         speichert ? (
           <ActivityIndicator color="#007AFF" style={{ marginRight: 8 }} />
         ) : (
@@ -607,28 +629,34 @@ export default function ProfilScreen() {
           </TouchableOpacity>
         ),
     });
-  }, [editModus, navigation, hatProfil, speichert]);
+  }, [editModus, navigation, ladeStatus, speichert]);
 
   function onProfilAenderung(neuesDaten: ProfilData) {
     editProfilRef.current = neuesDaten;
   }
 
   // Lädt noch
-  if (hatProfil === null) {
-    return <View style={{ flex: 1, backgroundColor: "#fff" }} />;
+  if (ladeStatus === "laedt") {
+    return (
+      <View style={[stile.einrichtenContainer, { justifyContent: "center" }]}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
   }
 
-  // Noch kein Profil → Einstieg in den Onboarding-Wizard
-  if (!hatProfil) {
+  // Backend nicht erreichbar o. Ä. → Fehlermeldung + erneut versuchen.
+  // (Abmelden ist immer im Header verfügbar — keine Sackgasse mehr.)
+  if (ladeStatus === "fehler") {
     return (
       <View style={stile.einrichtenContainer}>
-        <Ionicons name="person-circle-outline" size={72} color="#C7C7CC" />
-        <Text style={stile.einrichtenTitel}>Profil einrichten</Text>
+        <Ionicons name="cloud-offline-outline" size={64} color="#C7C7CC" />
+        <Text style={stile.einrichtenTitel}>Server nicht erreichbar</Text>
         <Text style={stile.einrichtenText}>
-          Lege in wenigen Schritten dein Profil an, damit dich andere finden können.
+          Dein Profil konnte nicht geladen werden. Prüfe deine Verbindung und
+          versuche es erneut.
         </Text>
-        <TouchableOpacity style={stile.einrichtenKnopf} onPress={() => router.push("/onboarding")}>
-          <Text style={stile.einrichtenKnopfText}>Los geht&apos;s</Text>
+        <TouchableOpacity style={stile.einrichtenKnopf} onPress={ladeProfil}>
+          <Text style={stile.einrichtenKnopfText}>Erneut versuchen</Text>
         </TouchableOpacity>
       </View>
     );
