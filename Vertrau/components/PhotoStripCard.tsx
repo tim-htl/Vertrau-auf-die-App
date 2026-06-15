@@ -38,7 +38,7 @@ const FUN_TYPO = {
     fontWeight: "900",
     letterSpacing: -1,
     textTransform: "uppercase",
-    color: TEXT,
+    color: "#303030",
   },
   subline: {
     fontFamily: FUN_FONT,
@@ -69,7 +69,7 @@ const FUN_TYPO = {
     fontFamily: FUN_FONT,
     fontSize: 11,
     lineHeight: 13.5,
-    fontWeight: "600",
+    fontWeight: "700",
     letterSpacing: 0.4,
     textTransform: "uppercase",
     color: TEXT,

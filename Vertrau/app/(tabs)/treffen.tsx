@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     backgroundColor: SCREEN_BG,
   },
   hintergrundBild: {
-    opacity: 1,
+    opacity: 100,
   },
   hintergrundOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
 
   card: {
     borderRadius: 35,
-    backgroundColor: "#f8f8f6",
+    backgroundColor: "rgba(248,248,246)",
     overflow: "hidden",
     shadowColor: "#7d7d7d",
     shadowOffset: { width: 0, height: 18 },

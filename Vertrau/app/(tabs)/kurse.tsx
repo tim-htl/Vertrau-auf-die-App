@@ -133,13 +133,13 @@ function StudiengangKarte({
         >
           <View style={styles.heroOverlay} />
 
-          <View style={styles.topBar}>
-            <Text style={styles.logo}>KURSE</Text>
-            <UniLogo />
-          </View>
-          
-          {/* Der Bereich heroBottom mit 'TU Berlin' und 'ÜBERSICHT' wurde hier entfernt */}
+
         </ImageBackground>
+
+        {/* Floating Logo - Tweak coordinates in styles.floatingLogo */}
+        <View style={styles.floatingLogo}>
+           <UniLogo />
+        </View>
 
         <View style={styles.content}>
           <Text 
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
   },
 
   headerCard: {
-    minHeight: 280, // Die Höhe leicht verringert, da wir unten die Bar entfernt haben (war 360)
+    minHeight: 280, 
   },
 
   headerHero: {
@@ -482,19 +482,29 @@ const styles = StyleSheet.create({
 
   logo: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 2,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
+  // NEW: Absolute positioning for the logo
+  floatingLogo: {
+    position: "absolute",
+    top: 10, // Adjust this so it overlaps perfectly with the image and content
+     // Change to 'left: 24' if you want it on the left side
+    right: 20,
+    zIndex: 10,
+    elevation: 13, // Ensure it sits higher than the card shadow
+  },
+
   uniLogo: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 70,
+    height: 70,
+    borderRadius: 45,
     backgroundColor: "#fff",
     borderWidth: 2,
     borderColor: CARD_BG,
-    overflow: "hidden", // Damit das Bild bei eventuellem Überlappen nicht über den Kreis ragt
+    overflow: "hidden", 
   },
 
   uniLogoPlatzhalter: {
@@ -503,8 +513,8 @@ const styles = StyleSheet.create({
   },
 
   tuLogoImage: {
-    width: 44,
-    height: 44,
+    width: 50,
+    height: 50,
   },
 
   content: {
@@ -574,7 +584,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 26,
     fontWeight: "900",
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
     textTransform: "uppercase",
   },
 
@@ -609,8 +619,8 @@ const styles = StyleSheet.create({
   },
 
   compactIconBubble: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 22,
     backgroundColor: BLACK,
     justifyContent: "center",
@@ -687,8 +697,8 @@ const styles = StyleSheet.create({
   },
 
   avatarBubble: {
-    width: 42,
-    height: 42,
+    width: 38,
+    height: 38,
     borderRadius: 21,
     backgroundColor: "#fff",
     borderWidth: 2,
@@ -706,8 +716,8 @@ const styles = StyleSheet.create({
   },
 
   moreAvatars: {
-    width: 42,
-    height: 42,
+    width: 38,
+    height: 38,
     borderRadius: 21,
     backgroundColor: "#111",
     borderWidth: 2,
