@@ -68,6 +68,44 @@ const SCREEN_BG = "#FFFFFF";
 const TEXT = "#1A1A1A";
 const MUTED = "#8E8E93";
 
+const TREFFEN_TYPO = {
+  title: {
+    color: "#111",
+    fontSize: 30,
+    lineHeight: 32,
+    fontWeight: "900",
+    letterSpacing: -1,
+    textTransform: "uppercase",
+  },
+  sectionTitle: {
+    color: "#303030",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  body: {
+    color: "#3d3d3d",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "400",
+  },
+  meta: {
+    color: "#777",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  button: {
+    color: "#111",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+} as const;
+
 const MODUL_KATALOG = [
   ...new Set(
     alleModule(DEMO_STUDIENGANG.moduldatenbank).map((modul) => modul.name)
@@ -661,7 +699,13 @@ function ProfilBearbeiten({
               ]}
             >
               <Text style={stile.readonlyLabel}>{label}</Text>
-              <Text style={stile.readonlyWert}>{wert}</Text>
+              <Text style={[
+                stile.readonlyWert, 
+                // Name im Treffen-Stil stärker hervorheben:
+                label === "Name" && { fontWeight: "900", color: TEXT }
+              ]}>
+                {wert}
+              </Text>
             </View>
           ))}
         </View>
@@ -1110,7 +1154,7 @@ const stile = StyleSheet.create({
   },
   hintergrundOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,255,255,0.16)",
+   // backgroundColor: "rgba(255,255,255,0.16)",
   },
 
   headerLinksButton: {
@@ -1128,11 +1172,7 @@ const stile = StyleSheet.create({
     backgroundColor: "#F2F2F7",
   },
   editSektionTitel: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#6D6D72",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+    ...TREFFEN_TYPO.sectionTitle,
     marginTop: 24,
     marginBottom: 7,
     marginHorizontal: 20,
@@ -1187,15 +1227,15 @@ const stile = StyleSheet.create({
   },
 
   bioInput: {
-    fontSize: 15,
+    ...TREFFEN_TYPO.body,
     color: TEXT,
     minHeight: 80,
     textAlignVertical: "top",
-    lineHeight: 21,
   },
   zeichenZaehler: {
     fontSize: 12,
     color: "#aaa",
+    fontWeight: "600",
     textAlign: "right",
     marginTop: 4,
   },
@@ -1213,10 +1253,8 @@ const stile = StyleSheet.create({
   },
   frageKopfText: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
+    ...TREFFEN_TYPO.meta,
     color: TEXT,
-    lineHeight: 18,
   },
   frageAktionen: {
     flexDirection: "row",
@@ -1224,11 +1262,10 @@ const stile = StyleSheet.create({
     gap: 10,
   },
   antwortInput: {
-    fontSize: 15,
+    ...TREFFEN_TYPO.body,
     color: TEXT,
     minHeight: 44,
     textAlignVertical: "top",
-    lineHeight: 21,
     marginTop: 8,
   },
   frageHinzufuegenKnopf: {
@@ -1239,9 +1276,8 @@ const stile = StyleSheet.create({
     paddingVertical: 10,
   },
   frageHinzufuegenText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#007AFF",
+    ...TREFFEN_TYPO.button,
+    color: "#111",
   },
   frageAuswahlZeile: {
     paddingVertical: 12,
@@ -1249,9 +1285,8 @@ const stile = StyleSheet.create({
     borderColor: "#d1d1d6",
   },
   frageAuswahlText: {
-    fontSize: 14,
+    ...TREFFEN_TYPO.body,
     color: TEXT,
-    lineHeight: 19,
   },
 
   sucheInput: {
@@ -1259,7 +1294,7 @@ const stile = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    fontSize: 15,
+    ...TREFFEN_TYPO.body,
     color: TEXT,
     marginBottom: 10,
   },
@@ -1288,11 +1323,12 @@ const stile = StyleSheet.create({
     paddingVertical: 5,
   },
   tagEditText: {
+    ...TREFFEN_TYPO.meta,
     fontSize: 13,
     color: TEXT,
   },
   keineTreffer: {
-    fontSize: 13,
+    ...TREFFEN_TYPO.meta,
     color: MUTED,
     paddingVertical: 4,
   },
@@ -1324,11 +1360,11 @@ const stile = StyleSheet.create({
     borderBottomColor: "#d1d1d6",
   },
   readonlyLabel: {
-    fontSize: 15,
+    ...TREFFEN_TYPO.meta,
     color: TEXT,
   },
   readonlyWert: {
-    fontSize: 15,
+    ...TREFFEN_TYPO.meta,
     color: MUTED,
     maxWidth: "60%",
     textAlign: "right",
@@ -1340,9 +1376,9 @@ const stile = StyleSheet.create({
     paddingBottom: 32,
   },
   sheetTitel: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: TEXT,
+    ...TREFFEN_TYPO.title,
+    fontSize: 28,
+    lineHeight: 31,
     marginBottom: 16,
   },
   sheetBioInput: {
@@ -1350,9 +1386,8 @@ const stile = StyleSheet.create({
     backgroundColor: "#F2F2F7",
     borderRadius: 14,
     padding: 14,
-    fontSize: 16,
+    ...TREFFEN_TYPO.body,
     color: TEXT,
-    lineHeight: 22,
     textAlignVertical: "top",
   },
   sheetSpeichernButton: {
@@ -1364,7 +1399,9 @@ const stile = StyleSheet.create({
   },
   sheetSpeichernText: {
     color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
   },
 });

@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import {
   FlatList,
   Image,
+  ImageBackground,
   Pressable,
   StyleSheet,
   Text,
@@ -13,6 +14,25 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DEMO_AKTIVITAETEN, type Aktivitaet } from "../../data/aktivitaeten";
 import { ladeUserAktivitaeten } from "../../data/userAktivitaeten";
+
+const STATIC_BACKGROUND = require("../../assets/images/grad1.jpg");
+const SCREEN_BG = "#FFFFFF";
+
+// ─── App Hintergrund ─────────────────────────────────────────────────────────
+
+function AppHintergrund({ children }: { children?: ReactNode }) {
+  return (
+    <ImageBackground
+      source={STATIC_BACKGROUND}
+      resizeMode="cover"
+      style={styles.hintergrund}
+      imageStyle={styles.hintergrundBild}
+    >
+      <View pointerEvents="none" style={styles.hintergrundOverlay} />
+      {children}
+    </ImageBackground>
+  );
+}
 
 // ─── Profilbild-Platzhalter ──────────────────────────────────────────────────
 
@@ -159,7 +179,7 @@ export default function TreffenScreen() {
   const verfuegbareHoehe = height - headerHeight - bottomBarHeight;
 
   return (
-    <View style={styles.screen}>
+    <AppHintergrund>
       <FlatList
         data={alleAktivitaeten}
         keyExtractor={(item) => item.id}
@@ -206,14 +226,21 @@ export default function TreffenScreen() {
       >
         <Ionicons name="add" size={30} color="#FF9A9E" />
       </Pressable>
-    </View>
+    </AppHintergrund>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  hintergrund: {
     flex: 1,
-    backgroundColor: "#fff7fb",
+    backgroundColor: SCREEN_BG,
+  },
+  hintergrundBild: {
+    opacity: 1,
+  },
+  hintergrundOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.16)",
   },
 
   itemContainer: {
@@ -225,7 +252,7 @@ const styles = StyleSheet.create({
     borderRadius: 35,
     backgroundColor: "#f8f8f6",
     overflow: "hidden",
-    shadowColor: "##7d7d7d",
+    shadowColor: "#7d7d7d",
     shadowOffset: { width: 0, height: 18 },
     shadowOpacity: 0.5,
     shadowRadius: 24,

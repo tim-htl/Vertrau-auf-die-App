@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import {
   Image,
+  Platform,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -15,6 +16,65 @@ const CARD_BG = "rgba(255,255,255,0.12)";
 const TEXT = "#1A1A1A";
 const MUTED = "#8E8E93";
 const LINE = "rgba(35, 35, 35, 0.12)";
+const FUN_PINK = "#FF9A9E";
+
+const FUN_FONT = Platform.select({
+  ios: "Avenir Next",
+  android: "sans-serif-condensed",
+  default: undefined,
+});
+
+const BODY_FONT = Platform.select({
+  ios: "Avenir Next",
+  android: "sans-serif",
+  default: undefined,
+});
+
+const FUN_TYPO = {
+  display: {
+    fontFamily: FUN_FONT,
+    fontSize: 30,
+    lineHeight: 32,
+    fontWeight: "900",
+    letterSpacing: -1,
+    textTransform: "uppercase",
+    color: TEXT,
+  },
+  subline: {
+    fontFamily: FUN_FONT,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+    color: MUTED,
+  },
+  label: {
+    fontFamily: FUN_FONT,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "900",
+    letterSpacing: 1.15,
+    textTransform: "uppercase",
+    color: MUTED,
+  },
+  body: {
+    fontFamily: BODY_FONT,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600",
+    color: TEXT,
+  },
+  tag: {
+    fontFamily: FUN_FONT,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: TEXT,
+  },
+} as const;
 
 export type PhotoStripCardProps = {
   name: string;
@@ -30,22 +90,38 @@ export type PhotoStripCardProps = {
 
 function BildPlatzhalter({ size }: { size: number }) {
   return (
-    <View style={[stile.bildPlatzhalter, stile.neuSoftInset, { width: size, height: size }]}>
+    <View
+      style={[
+        stile.bildPlatzhalter,
+        stile.neuSoftInset,
+        { width: size, height: size },
+      ]}
+    >
       <Ionicons
         name="person"
         size={size * 0.5}
-        color="#C7C7CC"
+        color={FUN_PINK}
         style={{ marginTop: size * 0.08 }}
       />
     </View>
   );
 }
 
-function InfoZeile({ label, wert }: { label: string; wert: string }) {
+function InfoZeile({
+  label,
+  wert,
+  numberOfLines = 2,
+}: {
+  label: string;
+  wert: string;
+  numberOfLines?: number;
+}) {
   return (
     <View style={stile.infoZeile}>
       <Text style={stile.infoLabel}>{label}</Text>
-      <Text style={stile.infoWert}>{wert || "—"}</Text>
+      <Text style={stile.infoWert} numberOfLines={numberOfLines}>
+        {wert || "—"}
+      </Text>
     </View>
   );
 }
@@ -66,7 +142,7 @@ function TagReihe({
       {items.length > 0 ? (
         <View style={stile.tagReihe}>
           {items.map((item, i) => (
-            <View key={i} style={[stile.tag, stile.neuSoft]}>
+            <View key={`${item}-${i}`} style={[stile.tag, stile.neuSoft]}>
               {mitIcons && (
                 <Ionicons
                   name={hobbyIcon(item) as IconName}
@@ -75,7 +151,9 @@ function TagReihe({
                   style={{ marginRight: 4 }}
                 />
               )}
-              <Text style={stile.tagText}>{item}</Text>
+              <Text style={stile.tagText} numberOfLines={1}>
+                {item}
+              </Text>
             </View>
           ))}
         </View>
@@ -114,34 +192,42 @@ export function PhotoStripCard({
   const infoSpalteBreite = innenBreite - bildSpalteBreite - spaltenGap;
 
   const anzahlBilder = 5;
-  const bildAbstand = 4; // Bilder enger zusammen
-  const vertikalerPadding = 26; // Mehr Abstand oben und unten
-  const verfuegbarFuerBilder = cardHoehe - (vertikalerPadding * 2);
-  
+  const bildAbstand = 4;
+  const vertikalerPadding = 26;
+  const verfuegbarFuerBilder = cardHoehe - vertikalerPadding * 2;
+
   const bildKante = Math.min(
-    bildSpalteBreite, 
-    (verfuegbarFuerBilder - (bildAbstand * (anzahlBilder - 1))) / anzahlBilder
+    bildSpalteBreite,
+    (verfuegbarFuerBilder - bildAbstand * (anzahlBilder - 1)) / anzahlBilder
   );
 
   return (
-    <View style={[stile.karteAussen, { width: cardBreite, height: cardHoehe }]}>
-      <View style={[stile.karteSchatten, { width: cardBreite, height: cardHoehe }]}>
+    <View style={[stile.karteAussen, { width: cardBreite, height: cardHoehe }]}> 
+      <View style={[stile.karteSchatten, { width: cardBreite, height: cardHoehe }]}> 
         <View style={stile.karteClip}>
           <BlurView
             pointerEvents="none"
             tint="light"
             intensity={62}
-            style={[stile.glasPanel, { left: stripLinksAbstand, width: glasBreite }]}
+            style={[
+              stile.glasPanel,
+              { left: stripLinksAbstand, width: glasBreite },
+            ]}
           >
             <View style={stile.glasWeiss} />
           </BlurView>
 
-          <View style={[stile.zeile, { paddingHorizontal: seitenPadding, gap: spaltenGap }]}>
+          <View
+            style={[
+              stile.zeile,
+              { paddingHorizontal: seitenPadding, gap: spaltenGap },
+            ]}
+          >
             <View
               style={{
                 width: bildSpalteBreite,
-                paddingVertical: vertikalerPadding, // Neuer Abstand
-                justifyContent: "space-between", 
+                paddingVertical: vertikalerPadding,
+                justifyContent: "space-between",
                 alignItems: "center",
               }}
             >
@@ -149,14 +235,22 @@ export function PhotoStripCard({
                 bild ? (
                   <View
                     key={i}
-                    style={[stile.bildRahmen, stile.neuSoft, { width: bildKante, height: bildKante }]}
+                    style={[
+                      stile.bildRahmen,
+                      stile.neuSoft,
+                      { width: bildKante, height: bildKante },
+                    ]}
                   >
                     <Image source={{ uri: bild }} style={stile.bild} />
                   </View>
                 ) : (
                   <View
                     key={i}
-                    style={[stile.bildRahmen, stile.neuSoft, { width: bildKante, height: bildKante }]}
+                    style={[
+                      stile.bildRahmen,
+                      stile.neuSoft,
+                      { width: bildKante, height: bildKante },
+                    ]}
                   >
                     <BildPlatzhalter size={bildKante} />
                   </View>
@@ -164,17 +258,21 @@ export function PhotoStripCard({
               )}
             </View>
 
-            <View style={[stile.infoSpalte, { width: infoSpalteBreite }]}>
-              <Text style={stile.nameText} numberOfLines={1}>
-                {name}
-              </Text>
-              <Text style={stile.alterText}>{alter} Jahre</Text>
+            <View style={[stile.infoSpalte, { width: infoSpalteBreite }]}> 
+              <View style={stile.nameBlock}>
+                <Text style={stile.nameText} numberOfLines={1}>
+                  {name}
+                </Text>
+                <View style={stile.alterBadge}>
+                  <Text style={stile.alterText}>{alter} Jahre</Text>
+                </View>
+              </View>
 
               <View style={stile.trennerOben} />
 
-              <InfoZeile label="Bio" wert={bio || "—"} />
-              <InfoZeile label="Uni" wert={uni} />
-              <InfoZeile label="Studiengang" wert={studiengang} />
+              <InfoZeile label="Bio" wert={bio || "—"} numberOfLines={4} />
+              <InfoZeile label="Uni" wert={uni} numberOfLines={1} />
+              <InfoZeile label="Studiengang" wert={studiengang} numberOfLines={2} />
               <TagReihe label="Module" items={module} />
               <TagReihe label="Hobbies" items={hobbies} mitIcons />
             </View>
@@ -239,76 +337,81 @@ const stile = StyleSheet.create({
   },
   infoSpalte: {
     flex: 1,
-    paddingTop: 4,
+    paddingTop: 6,
+  },
+  nameBlock: {
+    alignItems: "flex-start",
   },
   bildRahmen: {
     backgroundColor: "rgba(255,255,255,0.36)",
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.64)",
-    borderRadius: 16,
+    borderRadius: 18,
   },
   bild: {
     width: "100%",
     height: "100%",
   },
   bildPlatzhalter: {
-    backgroundColor: "rgba(245,245,245,0.50)",
+    backgroundColor: "rgba(255,245,248,0.72)",
     justifyContent: "flex-end",
     alignItems: "center",
     overflow: "hidden",
   },
   nameText: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: TEXT,
-    letterSpacing: -0.5,
+    ...FUN_TYPO.display,
+    maxWidth: "100%",
+  },
+  alterBadge: {
+    marginTop: 5,
+    backgroundColor: "rgba(255,255,255,0.52)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.62)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
   },
   alterText: {
-    fontSize: 15,
-    color: MUTED,
-    marginTop: 2,
-    fontWeight: "500",
+    ...FUN_TYPO.subline,
+    color: TEXT,
+    fontSize: 12,
+    lineHeight: 16,
   },
   trennerOben: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: LINE,
-    marginVertical: 10,
+    marginTop: 12,
+    marginBottom: 14,
   },
   infoZeile: {
-    marginBottom: 45,
+    marginBottom: 18,
   },
   infoLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: MUTED,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 4,
+    ...FUN_TYPO.label,
+    marginBottom: 5,
   },
   infoWert: {
-    fontSize: 14,
-    color: TEXT,
-    lineHeight: 19,
+    ...FUN_TYPO.body,
   },
   tagReihe: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 5,
+    gap: 6,
   },
   tag: {
+    maxWidth: "100%",
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.48)",
-    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.52)",
+    borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.54)",
+    borderColor: "rgba(255,255,255,0.62)",
   },
   tagText: {
-    fontSize: 12,
-    color: TEXT,
-    fontWeight: "500",
+    ...FUN_TYPO.tag,
+    flexShrink: 1,
   },
 });
