@@ -1,16 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   Image,
   ImageBackground,
   Pressable,
   ScrollView,
+  StyleProp,
   StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
   View,
+  ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DEMO_STUDIENGANG } from "../../data/kurse";
@@ -18,6 +20,9 @@ import { DEMO_STUDIENGANG } from "../../data/kurse";
 const CARD_BG = "#f8f8f6";
 const BLACK = "#050505";
 const ACCENT = "#ff6b5f";
+
+const STATIC_BACKGROUND = require("../../assets/images/grad1.jpg");
+const SCREEN_BG = "#FFFFFF";
 
 type Teilnehmer = {
   id: string;
@@ -42,6 +47,28 @@ type ModulBereichItem = {
   module?: ModulItem[];
   bereiche?: ModulBereichItem[];
 };
+
+// ─── App Hintergrund ─────────────────────────────────────────────────────────
+
+function AppHintergrund({
+  children,
+  style,
+}: {
+  children?: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <ImageBackground
+      source={STATIC_BACKGROUND}
+      resizeMode="cover"
+      style={[styles.hintergrund, style]}
+      imageStyle={styles.hintergrundBild}
+    >
+      <View pointerEvents="none" style={styles.hintergrundOverlay} />
+      {children}
+    </ImageBackground>
+  );
+}
 
 // Das hochgeladene TU Logo wird nun hier fest eingebunden
 function UniLogo() {
@@ -100,7 +127,7 @@ function StudiengangKarte({
     <View style={styles.itemContainer}>
       <View style={[styles.card, styles.headerCard, { width: cardWidth }]}>
         <ImageBackground
-          source={require("../../assets/images/pack2.jpg")}
+          source={require("../../assets/images/tub.jpg")}
           style={styles.headerHero}
           imageStyle={styles.headerHeroImage}
         >
@@ -303,8 +330,9 @@ export default function KurseScreen() {
   const sucheIstAktiv = suche.trim().length > 0;
 
   return (
-    <View style={styles.screen}>
+    <AppHintergrund>
       <ScrollView
+        style={styles.screen}
         contentContainerStyle={{
           paddingTop: insets.top + 22,
           paddingBottom: 120,
@@ -382,11 +410,23 @@ export default function KurseScreen() {
           )}
         </SammelKarte>
       </ScrollView>
-    </View>
+    </AppHintergrund>
   );
 }
 
 const styles = StyleSheet.create({
+  hintergrund: {
+    flex: 1,
+    backgroundColor: SCREEN_BG,
+  },
+  hintergrundBild: {
+    opacity: 1,
+  },
+  hintergrundOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
+
   screen: {
     flex: 1,
   },

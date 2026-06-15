@@ -23,7 +23,7 @@ import { PhotoStripCard } from "../../components/PhotoStripCard";
 import { DEMO_PERSONEN, type Person } from "../../data/personen";
 import { likePerson, resetSwipes } from "../../data/swipes";
 
-const STATIC_BACKGROUND = require("../../assets/pack9.jpg");
+const STATIC_BACKGROUND = require("/Users/lindadang/Desktop/Vertrau-auf-die-App/Vertrau/assets/images/pack9.jpg");
 
 const SCREEN_BG = "#FFFFFF";
 const CARD_BG = "rgba(255,255,255,0.12)";
