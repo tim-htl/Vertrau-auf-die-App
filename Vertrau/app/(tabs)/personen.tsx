@@ -25,11 +25,11 @@ import { likePerson, resetSwipes } from "../../data/swipes";
 // Put the uploaded image into your project here:
 // assets/images/static-background.jpeg
 // If your screen file is in another folder, adjust this relative path.
-const STATIC_BACKGROUND = require("../../assets/images/pack1.jpg");
+const STATIC_BACKGROUND = require("../../assets/images/pack9.jpg");
 
 const SCREEN_BG = "#FFFFFF";
 const CARD_BG = "rgba(255,255,255,0.12)";
-const PHOTO_STRIP_GLASS_BG = "#FFFFFF"; // Changed to full opacity
+const PHOTO_STRIP_GLASS_BG = "rgba(255,255,255,0.90)";
 const TEXT = "#1A1A1A";
 const MUTED = "#8E8E93";
 const LINE = "rgba(35, 35, 35, 0.12)";
@@ -109,17 +109,16 @@ export function PersonenKarte({
   const cardBreite = breite;
   const cardHoehe = hoehe;
 
-  const seitenPadding = 16;
-  const spaltenGap = 14;
-  const trennerBreite = StyleSheet.hairlineWidth;
-
+  const seitenPadding = 18;
+  const stripLinksAbstand = 10;
+  const stripRechtsPadding = 10;
+  const spaltenGap = 26;
   const innenBreite = cardBreite - seitenPadding * 2;
-  const bildSpalteBreite = innenBreite * 0.34;
-  
-  // Recalculated to stop perfectly at the vertical line
-  const glasBreite = seitenPadding + bildSpalteBreite + spaltenGap;
-  const infoSpalteBreite =
-    innenBreite - bildSpalteBreite - spaltenGap * 2 - trennerBreite;
+  const bildSpalteBreite = innenBreite * 0.28;
+
+  const glasBreite =
+    seitenPadding - stripLinksAbstand + bildSpalteBreite + stripRechtsPadding;
+  const infoSpalteBreite = innenBreite - bildSpalteBreite - spaltenGap;
 
   const anzahlBilder = 5;
   const bildAbstand = 8;
@@ -132,8 +131,14 @@ export function PersonenKarte({
     <View style={[styles.karteAussen, { width: breite, height: hoehe }]}> 
       <View style={[styles.karteSchatten, { width: cardBreite, height: cardHoehe }]}> 
         <View style={styles.karteClip}>
-          {/* Stripped out the BlurView and Glanz since it's solid white now */}
-          <View pointerEvents="none" style={[styles.glasPanel, { width: glasBreite }]} />
+          <BlurView
+            pointerEvents="none"
+            tint="light"
+            intensity={62}
+            style={[styles.glasPanel, { left: stripLinksAbstand, width: glasBreite }]}
+          >
+            <View style={styles.glasWeiss} />
+          </BlurView>
 
           <View style={[styles.zeile, { paddingHorizontal: seitenPadding, gap: spaltenGap }]}> 
             <View style={{ width: bildSpalteBreite, gap: bildAbstand, alignItems: "center" }}> 
@@ -155,8 +160,6 @@ export function PersonenKarte({
                 )
               )}
             </View>
-
-            <View style={styles.vertikalerTrenner} />
 
             <View style={[styles.infoSpalte, { width: infoSpalteBreite }]}> 
               <Text style={styles.nameText} numberOfLines={1}>
@@ -278,8 +281,10 @@ export default function PersonenScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const headerHeight = insets.top + 44;
-  const bottomBarHeight = 100;
+  
+  // Angepasst an den neuen schmalen Header und die TabBar Höhe
+  const headerHeight = insets.top + 10;
+  const bottomBarHeight = 80;
   const karteHoehe = height - headerHeight - bottomBarHeight;
 
   const [feed, setFeed] = useState<Person[] | null>(null);
@@ -329,13 +334,6 @@ export default function PersonenScreen() {
           { paddingTop: headerHeight },
         ]}
       >
-        <TouchableOpacity
-          style={[styles.profilKnopf, styles.profilKnopfGlas, { top: insets.top + 10 }]}
-          onPress={() => router.push("/profil")}
-        >
-          <Ionicons name="person-circle" size={40} color={TEXT} />
-        </TouchableOpacity>
-
         <View style={[styles.leerKarte, styles.karteSchatten]}> 
           <View style={styles.leerKarteInnen}>
             <BlurView tint="light" intensity={34} style={StyleSheet.absoluteFill} />
@@ -362,12 +360,6 @@ export default function PersonenScreen() {
 
   return (
     <AppHintergrund>
-      <TouchableOpacity
-        style={[styles.profilKnopf, styles.profilKnopfGlas, { top: insets.top + 10 }]}
-        onPress={() => router.push("/profil")}
-      >
-        <Ionicons name="person-circle" size={40} color={TEXT} />
-      </TouchableOpacity>
       <FlatList
         data={feed}
         keyExtractor={(item) => item.id}
@@ -425,26 +417,6 @@ const styles = StyleSheet.create({
   liste: {
     backgroundColor: "transparent",
   },
-  profilKnopf: {
-    position: "absolute",
-    right: 20,
-    zIndex: 50,
-  },
-  profilKnopfGlas: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.34)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.58)",
-    shadowColor: "#9BA6B5",
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-  },
   karteAussen: {
     alignItems: "center",
     justifyContent: "center",
@@ -457,22 +429,29 @@ const styles = StyleSheet.create({
   karteClip: {
     flex: 1,
     overflow: "hidden",
-    backgroundColor: "transparent",
   },
   glasPanel: {
     position: "absolute",
     top: 0,
-    bottom: 0, // Stretches fully to the bottom
-    left: 0,   // Stretches fully to the left edge
-    backgroundColor: PHOTO_STRIP_GLASS_BG,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.66)",
-    shadowColor: "#9BA6B5",
-    shadowOpacity: 0.20,
-    shadowRadius: 0,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 7,
+    bottom: 0,
+    overflow: "hidden",
+    borderRadius: 24,
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 0,
+    borderColor: "white",
+    shadowColor: "#FFFFFF",
+    shadowOpacity: 0.22,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 0,
     zIndex: 2,
+  },
+  glasWeiss: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.18)",
   },
   neuSoft: {
     shadowColor: "#D8DDE3",
@@ -607,11 +586,6 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 16,
     zIndex: 3,
-  },
-  vertikalerTrenner: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: LINE,
-    alignSelf: "stretch",
   },
   infoSpalte: {
     flex: 1,

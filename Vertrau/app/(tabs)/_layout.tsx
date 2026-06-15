@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { Tabs } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
@@ -27,6 +28,25 @@ const activeIcons: Record<string, IconName> = {
   chat: "chatbubble",
   profil: "person",
 };
+
+function VerlaufHeaderBackground() {
+  return (
+    <>
+      <BlurView tint="light" intensity={80} style={StyleSheet.absoluteFill} />
+
+      <LinearGradient
+        colors={[
+          "rgba(255,255,255,0.5)",
+          "rgba(255,255,255,0.25)",
+          "rgba(255,255,255,0)",
+        ]}
+        locations={[0, 0.45, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+    </>
+  );
+}
 
 function BlurTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -108,28 +128,39 @@ function BlurTabBar({ state, navigation }: BottomTabBarProps) {
 }
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       tabBar={(props) => <BlurTabBar {...props} />}
       screenOptions={{
+        headerTitle: "",
         headerTransparent: true,
-        headerTitleStyle: {
-          fontWeight: "600",
+        headerStyle: {
+          height: insets.top + 10,
+          backgroundColor: "transparent",
         },
-        headerBackground: () => (
-          <BlurView
-            tint="light"
-            intensity={80}
-            style={StyleSheet.absoluteFill}
-          />
-        ),
+        headerShadowVisible: false,
+        headerBackground: () => <VerlaufHeaderBackground />,
       }}
     >
-      <Tabs.Screen name="personen" options={{ title: "Personen" }} />
-      <Tabs.Screen name="treffen" options={{ title: "Treffen" }} />
-      <Tabs.Screen name="kurse" options={{ title: "Kurse" }} />
-      <Tabs.Screen name="chat" options={{ title: "Chat" }} />
-      <Tabs.Screen name="profil" options={{ title: "Profil" }} />
+      <Tabs.Screen name="personen" />
+      <Tabs.Screen name="treffen" />
+      <Tabs.Screen name="kurse" />
+      <Tabs.Screen name="chat" />
+      <Tabs.Screen
+        name="profil"
+        options={{
+          headerTitle: "Profil",
+          headerTitleStyle: {
+            fontWeight: "600",
+          },
+          headerStyle: {
+            height: insets.top + 44,
+            backgroundColor: "transparent",
+          },
+        }}
+      />
     </Tabs>
   );
 }
@@ -137,7 +168,7 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     position: "absolute",
-    borderRadius:50,
+    borderRadius: 50,
     left: 0,
     right: 0,
     bottom: 0,
@@ -157,7 +188,6 @@ const styles = StyleSheet.create({
     height: TAB_BAR_HEIGHT,
     justifyContent: "center",
     alignItems: "center",
-    
   },
 
   activePill: {

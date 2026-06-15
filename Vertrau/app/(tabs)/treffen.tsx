@@ -22,7 +22,7 @@ function MiniAvatar({ bild }: { bild?: string }) {
       {bild ? (
         <Image source={{ uri: bild }} style={styles.avatarImage} />
       ) : (
-        <Ionicons name="person" size={17} color="#111" />
+        <Ionicons name="person" size={17} color="#FF9A9E" />
       )}
     </View>
   );
@@ -204,7 +204,7 @@ export default function TreffenScreen() {
         ]}
         onPress={() => router.push("/aktivitaet/standort-waehlen")}
       >
-        <Ionicons name="add" size={30} color="#fff" />
+        <Ionicons name="add" size={30} color="#FF9A9E" />
       </Pressable>
     </View>
   );
@@ -213,7 +213,7 @@ export default function TreffenScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-   // backgroundColor: "white",
+    backgroundColor: "#faf6e6",
   },
 
   itemContainer: {
@@ -222,10 +222,10 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    borderRadius: 34,
+    borderRadius: 35,
     backgroundColor: "#f8f8f6",
     overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: "#ff5c5c",
     shadowOffset: { width: 0, height: 18 },
     shadowOpacity: 0.28,
     shadowRadius: 24,
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
+    shadowColor: "#ff5c5c",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#050505",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
+    shadowColor: "#ff5c5c",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28,
     shadowRadius: 14,

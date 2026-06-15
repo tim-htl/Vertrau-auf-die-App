@@ -4,6 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation, useRouter } from "expo-router";
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -14,6 +15,7 @@ import {
 import {
   Alert,
   Image,
+  ImageBackground,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -43,11 +45,22 @@ const MAX_BILDER = 10;
 const KP_BILDER = 5;
 const SICHTBARE_KARTEN_BILDER = 5;
 
-const TAB_BAR_HOEHE = 65;
-const TAB_BAR_ABSTAND_UNTEN = 24;
+// Layout-Konstanten für die Tab-Bar
+const TAB_BAR_HOEHE_BASIS = 65;
+const TAB_BAR_ABSTAND_UNTEN_BASIS = 24;
 const TAB_BAR_EXTRA_ABSTAND = 20;
 
 const STORAGE_KEY = "profil_v2";
+
+// Gleiches visuelles Grunddesign wie im Personen-Screen.
+const STATIC_BACKGROUND = require("../../assets/images/pack8.jpg");
+
+const SCREEN_BG = "#FFFFFF";
+const CARD_BG = "rgba(255,255,255,0.12)";
+const PHOTO_STRIP_GLASS_BG = "#FFFFFF";
+const TEXT = "#1A1A1A";
+const MUTED = "#8E8E93";
+const LINE = "rgba(35, 35, 35, 0.12)";
 
 const MODUL_KATALOG = [
   ...new Set(
@@ -136,6 +149,34 @@ async function bildAuswaehlen(): Promise<string | null> {
   return result.assets?.[0]?.uri ?? null;
 }
 
+
+function AppHintergrund({ children }: { children?: ReactNode }) {
+  return (
+    <ImageBackground
+      source={STATIC_BACKGROUND}
+      resizeMode="cover"
+      style={stile.hintergrund}
+      imageStyle={stile.hintergrundBild}
+    >
+      <View pointerEvents="none" style={stile.hintergrundOverlay} />
+      {children}
+    </ImageBackground>
+  );
+}
+
+function BildPlatzhalter({ size }: { size: number }) {
+  return (
+    <View style={[stile.bildPlatzhalter, stile.neuSoftInset, { width: size, height: size }]}>
+      <Ionicons
+        name="person"
+        size={size * 0.5}
+        color="#C7C7CC"
+        style={{ marginTop: size * 0.08 }}
+      />
+    </View>
+  );
+}
+
 // ─── Ansicht: Profil-Karte ───────────────────────────────────────────────────
 
 function ProfilAnsicht({ profil }: { profil: ProfilData }) {
@@ -143,16 +184,22 @@ function ProfilAnsicht({ profil }: { profil: ProfilData }) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
 
+  // Dynamische Berechnung des reservierten Raums für die Tab-Bar
+  // (Basis-Höhe + Basis-Abstand + unteres Safe-Area-Inset des Geräts)
   const tabBarReserviert =
-    TAB_BAR_HOEHE + TAB_BAR_ABSTAND_UNTEN + Math.max(insets.bottom, 0);
+    TAB_BAR_HOEHE_BASIS + TAB_BAR_ABSTAND_UNTEN_BASIS + insets.bottom;
 
-  const verfuegbar = Math.max(360, height - headerHeight - tabBarReserviert);
+  // ANPASSUNG: Dynamische Berechnung der verfügbaren Höhe für die Karte
+  const verfuegbar = height - headerHeight - tabBarReserviert;
 
   const seitenPadding = 16;
   const spaltenGap = 14;
+  const trennerBreite = StyleSheet.hairlineWidth;
   const innenBreite = width - seitenPadding * 2;
-  const bildSpalteBreite = innenBreite * 0.33;
-  const infoSpalteBreite = innenBreite - bildSpalteBreite - spaltenGap;
+  const bildSpalteBreite = innenBreite * 0.34;
+  const glasBreite = seitenPadding + bildSpalteBreite + spaltenGap;
+  const infoSpalteBreite =
+    innenBreite - bildSpalteBreite - spaltenGap * 2 - trennerBreite;
 
   const bildAbstand = 8;
   const bildKanteNachHoehe =
@@ -162,68 +209,58 @@ function ProfilAnsicht({ profil }: { profil: ProfilData }) {
     SICHTBARE_KARTEN_BILDER;
 
   const bildKante = Math.min(bildSpalteBreite, bildKanteNachHoehe);
+  const bildAbstandDynamisch = Math.max(
+    bildAbstand,
+    (verfuegbar -
+      32 -
+      bildKante * SICHTBARE_KARTEN_BILDER) /
+      (SICHTBARE_KARTEN_BILDER - 1)
+  );
 
   return (
-    <View style={[stile.karte, { width, height: verfuegbar }]}>
-      <View
-        style={[
-          stile.zeile,
-          {
-            paddingHorizontal: seitenPadding,
-            gap: spaltenGap,
-          },
-        ]}
-      >
-        <View
-          style={{
-            width: bildSpalteBreite,
-            gap: bildAbstand,
-            alignItems: "center",
-          }}
-        >
+    <View style={[stile.karteAussen, { width, height: verfuegbar }]}>
+      <View style={[stile.karteSchatten, { width, height: verfuegbar }]}>
+        <View style={stile.karteClip}>
+          <View pointerEvents="none" style={[stile.glasPanel, { width: glasBreite }]} />
+
+          <View
+            style={[
+              stile.zeile,
+              {
+                paddingHorizontal: seitenPadding,
+                gap: spaltenGap,
+              },
+            ]}
+          >
+            <View
+              style={{
+                width: bildSpalteBreite,
+                gap: bildAbstandDynamisch,
+                alignItems: "center",
+              }}
+            >
           {profil.bilder.slice(0, SICHTBARE_KARTEN_BILDER).map((bild, i) =>
             bild ? (
-              <Image
+              <View
                 key={i}
-                source={{ uri: bild }}
-                style={{
-                  width: bildKante,
-                  height: bildKante,
-                  borderRadius: 14,
-                }}
-              />
+                style={[stile.bildRahmen, stile.neuSoft, { width: bildKante, height: bildKante }]}
+              >
+                <Image source={{ uri: bild }} style={stile.bild} />
+              </View>
             ) : (
               <View
                 key={i}
-                style={{
-                  width: bildKante,
-                  height: bildKante,
-                  borderRadius: 14,
-                  overflow: "hidden",
-                }}
+                style={[stile.bildRahmen, stile.neuSoft, { width: bildKante, height: bildKante }]}
               >
-                <View
-                  style={[
-                    stile.bildPlatzhalter,
-                    {
-                      width: bildKante,
-                      height: bildKante,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="person"
-                    size={bildKante * 0.5}
-                    color="#fff"
-                    style={{ marginTop: bildKante * 0.08 }}
-                  />
-                </View>
+                <BildPlatzhalter size={bildKante} />
               </View>
             )
           )}
-        </View>
+            </View>
 
-        <View style={[stile.infoSpalte, { width: infoSpalteBreite }]}>
+            <View style={stile.vertikalerTrenner} />
+
+            <View style={[stile.infoSpalte, { width: infoSpalteBreite }]}>
           <Text style={stile.nameText} numberOfLines={1}>
             {profil.name}
           </Text>
@@ -235,7 +272,9 @@ function ProfilAnsicht({ profil }: { profil: ProfilData }) {
           <InfoZeile label="Uni" wert={profil.uni} />
           <InfoZeile label="Studiengang" wert={profil.studiengang} />
           <TagZeile label="Module" items={profil.module} />
-          <TagZeile label="Hobbies" items={profil.hobbies} mitIcons />
+              <TagZeile label="Hobbies" items={profil.hobbies} mitIcons />
+            </View>
+          </View>
         </View>
       </View>
     </View>
@@ -267,12 +306,12 @@ function TagZeile({
       {items.length > 0 ? (
         <View style={stile.tagReihe}>
           {items.map((item) => (
-            <View key={item} style={stile.tag}>
+            <View key={item} style={[stile.tag, stile.neuSoft]}>
               {mitIcons && (
                 <Ionicons
                   name={hobbyIcon(item) as IconName}
                   size={12}
-                  color="#1a1a1a"
+                  color={TEXT}
                   style={{ marginRight: 4 }}
                 />
               )}
@@ -297,6 +336,7 @@ function ProfilBearbeiten({
   onChange: (profil: ProfilData) => void;
 }) {
   const headerHeight = useHeaderHeight();
+  const insets = useSafeAreaInsets(); // ANPASSUNG: Insets hier benötigt
 
   const [profil, setProfil] = useState(startProfil);
   const [frageAuswahlOffen, setFrageAuswahlOffen] = useState(false);
@@ -493,6 +533,13 @@ function ProfilBearbeiten({
     );
   }, [profil.frageAntworten]);
 
+  // ANPASSUNG: Dynamische Berechnung des unteren Abstands für das ScrollView
+  const unteresPadding =
+    TAB_BAR_HOEHE_BASIS +
+    TAB_BAR_ABSTAND_UNTEN_BASIS +
+    insets.bottom +
+    TAB_BAR_EXTRA_ABSTAND;
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -503,9 +550,10 @@ function ProfilBearbeiten({
         style={stile.editContainer}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          paddingTop: headerHeight + 12,
-          paddingBottom:
-            TAB_BAR_HOEHE + TAB_BAR_ABSTAND_UNTEN + TAB_BAR_EXTRA_ABSTAND,
+          // ANPASSUNG: Padding Top nutzt Safe-Area Insets nicht direkt,
+          // da KeyboardAvoidingView dies für uns handhabt.
+          paddingTop: 12,
+          paddingBottom: unteresPadding,
         }}
       >
         <Text style={stile.editSektionTitel}>Bilder</Text>
@@ -707,7 +755,7 @@ function ProfilBearbeiten({
                   <Ionicons
                     name={hobbyIcon(hobby) as IconName}
                     size={13}
-                    color="#1a1a1a"
+                    color={TEXT}
                     style={{ marginRight: 5 }}
                   />
                   <Text style={stile.tagEditText}>{hobby}</Text>
@@ -761,7 +809,7 @@ function ProfilBearbeiten({
                     <Ionicons
                       name={hobby.icon as IconName}
                       size={13}
-                      color="#1a1a1a"
+                      color={TEXT}
                       style={{ marginRight: 5 }}
                     />
                     <Text style={stile.tagEditText}>{hobby.name}</Text>
@@ -902,11 +950,10 @@ export default function ProfilScreen() {
 
   const editProfilRef = useRef<ProfilData>(DEFAULT_PROFIL);
 
+  // Dynamische Berechnung des reservierten Raums für die Tab-Bar
+  // (wird für die Pager Dots Positionierung benötigt)
   const tabBarReserviert =
-    TAB_BAR_HOEHE +
-    TAB_BAR_ABSTAND_UNTEN +
-    TAB_BAR_EXTRA_ABSTAND +
-    Math.max(insets.bottom, 0);
+    TAB_BAR_HOEHE_BASIS + TAB_BAR_ABSTAND_UNTEN_BASIS + insets.bottom;
 
   useEffect(() => {
     let istAktiv = true;
@@ -970,10 +1017,10 @@ export default function ProfilScreen() {
       headerLeft: () => (
         <TouchableOpacity
           activeOpacity={0.7}
-          onPress={() => router.push("/onboarding")}
+          onPress={() => router.push("/settings")}
           style={stile.headerLinksButton}
         >
-          <Text style={stile.headerLinksText}>Onboarding</Text>
+          <Ionicons name="settings-outline" size={22} color="#007AFF" />
         </TouchableOpacity>
       ),
       headerRight: () => (
@@ -1002,7 +1049,7 @@ export default function ProfilScreen() {
   }
 
   return (
-    <View style={stile.screen}>
+    <AppHintergrund>
       <ScrollView
         horizontal
         pagingEnabled
@@ -1047,7 +1094,9 @@ export default function ProfilScreen() {
         style={[
           stile.pagerDots,
           {
-            bottom: tabBarReserviert,
+            // ANPASSUNG: Positionierung der Dots orientiert sich an der
+            // reservierten Tab-Bar Höhe.
+            bottom: tabBarReserviert + 10,
           },
         ]}
         pointerEvents="none"
@@ -1062,16 +1111,27 @@ export default function ProfilScreen() {
           />
         ))}
       </View>
-    </View>
+    </AppHintergrund>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const stile = StyleSheet.create({
+  hintergrund: {
+    flex: 1,
+    backgroundColor: SCREEN_BG,
+  },
+  hintergrundBild: {
+    opacity: 1,
+  },
+  hintergrundOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
   screen: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "transparent",
   },
 
   headerLinksButton: {
@@ -1088,18 +1148,73 @@ const stile = StyleSheet.create({
     padding: 8,
   },
 
-  karte: {
-    backgroundColor: "#fff",
-    justifyContent: "flex-start",
-    paddingTop: 16,
+  karteAussen: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  karteSchatten: {
+    borderRadius: 0,
+    backgroundColor: CARD_BG,
+    elevation: 0,
+  },
+  karteClip: {
+    flex: 1,
+    overflow: "hidden",
+    backgroundColor: "transparent",
+  },
+  glasPanel: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: PHOTO_STRIP_GLASS_BG,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.66)",
+    shadowColor: "#9BA6B5",
+    shadowOpacity: 0.2,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 7,
+    zIndex: 2,
+  },
+  neuSoft: {
+    shadowColor: "#D8DDE3",
+    shadowOpacity: 0.5,
+    shadowRadius: 7,
+    shadowOffset: { width: 3, height: 3 },
+    elevation: 3,
+  },
+  neuSoftInset: {
+    shadowColor: "#BFC5CC",
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    shadowOffset: { width: 2, height: 2 },
+    elevation: 2,
   },
   zeile: {
     flexDirection: "row",
     flex: 1,
+    paddingTop: 16,
     paddingBottom: 16,
+    zIndex: 3,
+  },
+  vertikalerTrenner: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: LINE,
+    alignSelf: "stretch",
+  },
+  bildRahmen: {
+    backgroundColor: "rgba(255,255,255,0.36)",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.64)",
+  },
+  bild: {
+    width: "100%",
+    height: "100%",
   },
   bildPlatzhalter: {
-    backgroundColor: "#C7C7CC",
+    backgroundColor: "rgba(245,245,245,0.50)",
     justifyContent: "flex-end",
     alignItems: "center",
     overflow: "hidden",
@@ -1111,18 +1226,18 @@ const stile = StyleSheet.create({
   nameText: {
     fontSize: 26,
     fontWeight: "700",
-    color: "#1a1a1a",
+    color: TEXT,
     letterSpacing: -0.5,
   },
   alterText: {
     fontSize: 15,
-    color: "#8E8E93",
+    color: MUTED,
     marginTop: 2,
     fontWeight: "500",
   },
   trenner: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "#e5e5ea",
+    backgroundColor: LINE,
     marginVertical: 10,
   },
   infoZeile: {
@@ -1131,14 +1246,14 @@ const stile = StyleSheet.create({
   infoLabel: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#8E8E93",
+    color: MUTED,
     textTransform: "uppercase",
     letterSpacing: 0.8,
     marginBottom: 4,
   },
   infoWert: {
     fontSize: 14,
-    color: "#1a1a1a",
+    color: TEXT,
     lineHeight: 19,
   },
 
@@ -1150,14 +1265,16 @@ const stile = StyleSheet.create({
   tag: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F2F2F7",
+    backgroundColor: "rgba(255,255,255,0.48)",
     borderRadius: 14,
     paddingHorizontal: 10,
     paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.54)",
   },
   tagText: {
     fontSize: 12,
-    color: "#1a1a1a",
+    color: TEXT,
     fontWeight: "500",
   },
 
@@ -1218,7 +1335,7 @@ const stile = StyleSheet.create({
   },
   editHinweis: {
     fontSize: 12,
-    color: "#8E8E93",
+    color: MUTED,
     textAlign: "center",
     marginTop: 6,
     marginBottom: 2,
@@ -1226,7 +1343,7 @@ const stile = StyleSheet.create({
 
   bioInput: {
     fontSize: 15,
-    color: "#1a1a1a",
+    color: TEXT,
     minHeight: 80,
     textAlignVertical: "top",
     lineHeight: 21,
@@ -1253,7 +1370,7 @@ const stile = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontWeight: "600",
-    color: "#1a1a1a",
+    color: TEXT,
     lineHeight: 18,
   },
   frageAktionen: {
@@ -1263,7 +1380,7 @@ const stile = StyleSheet.create({
   },
   antwortInput: {
     fontSize: 15,
-    color: "#1a1a1a",
+    color: TEXT,
     minHeight: 44,
     textAlignVertical: "top",
     lineHeight: 21,
@@ -1288,7 +1405,7 @@ const stile = StyleSheet.create({
   },
   frageAuswahlText: {
     fontSize: 14,
-    color: "#1a1a1a",
+    color: TEXT,
     lineHeight: 19,
   },
 
@@ -1298,7 +1415,7 @@ const stile = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
     fontSize: 15,
-    color: "#1a1a1a",
+    color: TEXT,
     marginBottom: 10,
   },
   tagReiheEdit: {
@@ -1327,11 +1444,11 @@ const stile = StyleSheet.create({
   },
   tagEditText: {
     fontSize: 13,
-    color: "#1a1a1a",
+    color: TEXT,
   },
   keineTreffer: {
     fontSize: 13,
-    color: "#8E8E93",
+    color: MUTED,
     paddingVertical: 4,
   },
 
@@ -1363,11 +1480,11 @@ const stile = StyleSheet.create({
   },
   readonlyLabel: {
     fontSize: 15,
-    color: "#1a1a1a",
+    color: TEXT,
   },
   readonlyWert: {
     fontSize: 15,
-    color: "#8E8E93",
+    color: MUTED,
     maxWidth: "60%",
     textAlign: "right",
   },
