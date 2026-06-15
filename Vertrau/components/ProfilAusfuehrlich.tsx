@@ -164,6 +164,7 @@ export function ProfilAusfuehrlich({
   profil,
   breite,
   onCarouselTouch,
+  bottomPadding = 0,
 }: {
   profil: ApProfil;
   // Breite explizit, damit die AP auch als Pager-Seite (Profil-Tab)
@@ -171,6 +172,7 @@ export function ProfilAusfuehrlich({
   breite?: number;
   // Durchgereicht ans Carousel — siehe BilderCarousel.onTouchAktiv.
   onCarouselTouch?: (aktiv: boolean) => void;
+  bottomPadding?: number;
 }) {
   const { width } = useWindowDimensions();
   const apBreite = breite ?? width;
@@ -180,7 +182,7 @@ export function ProfilAusfuehrlich({
   return (
     <ScrollView
       style={{ width: apBreite }}
-      contentContainerStyle={{ paddingBottom: 32 }}
+      contentContainerStyle={{ paddingBottom: 32 + bottomPadding }}
       showsVerticalScrollIndicator={false}
     >
       <BilderCarousel

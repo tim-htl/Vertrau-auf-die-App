@@ -2,19 +2,25 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useMemo } from "react";
 import {
   FlatList,
   Image,
+  ImageBackground,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { INITIAL_CHATS, type ChatItem, type Message } from "../../data/chats";
 import { ladeJoinedAktivitaeten } from "../../data/joined";
 import { ladeUserChats } from "../../data/userAktivitaeten";
+
+// ─── Hilfsfunktion: Nachrichten laden ────────────────────────────────────────
 
 async function ladeNachrichten(
   chatId: string,
@@ -27,6 +33,8 @@ async function ladeNachrichten(
   return initialFallback;
 }
 
+// ─── Einzelnes Chat-Listen-Element ───────────────────────────────────────────
+
 function ChatListItem({
   chat,
   letzteNachricht,
@@ -37,39 +45,46 @@ function ChatListItem({
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity style={styles.item} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.item} onPress={onPress} activeOpacity={0.6}>
+      {/* Profilbild / Aktivitätsbild */}
       {chat.image ? (
         <Image source={{ uri: chat.image }} style={styles.avatar} />
       ) : (
         <View style={styles.avatarPlatzhalter}>
-          <Ionicons name="person" size={28} color="#fff" style={{ marginTop: 6 }} />
+          <Ionicons name="person" size={22} color="#a1a1a1" />
         </View>
       )}
 
+      {/* Name + letzte Nachricht */}
       <View style={styles.textBereich}>
         <Text style={styles.name} numberOfLines={1}>
           {chat.name}
         </Text>
         <Text style={styles.vorschau} numberOfLines={1}>
-          {letzteNachricht}
+          {letzteNachricht || "Noch keine Nachrichten..."}
         </Text>
       </View>
+
+      <Ionicons name="chevron-forward" size={16} color="rgba(0,0,0,0.15)" />
     </TouchableOpacity>
   );
 }
+
+// ─── Trennlinie ───────────────────────────────────────────────────────────────
 
 function Trennlinie() {
   return <View style={styles.trennlinie} />;
 }
 
+// ─── Haupt-Screen ─────────────────────────────────────────────────────────────
+
 export default function ChatScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const [letzteNachrichten, setLetzteNachrichten] = useState<
-    Record<string, string>
-  >({});
-  const [sichtbareChats, setSichtbareChats] = useState<ChatItem[]>([]);
+  const [letzteNachrichten, setLetzteNachrichten] = useState<Record<string, string>>({});
+  const [alleChats, setAlleChats] = useState<ChatItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
+  // Beim Fokus immer neueste letzte Nachricht laden und Aktivitätschats filtern.
   useFocusEffect(
     useCallback(() => {
       async function laden() {
@@ -80,7 +95,7 @@ export default function ChatScreen() {
           if (chat.linkType !== "activity") return true;
           return !!chat.linkId && joined.includes(chat.linkId);
         });
-        setSichtbareChats(gefiltert);
+        setAlleChats(gefiltert);
 
         const eintraege: Record<string, string> = {};
         for (const chat of gefiltert) {
@@ -99,69 +114,158 @@ export default function ChatScreen() {
     }, [])
   );
 
+  // Filterung für die Suchleiste
+  const sichtbareChats = useMemo(() => {
+    if (!searchQuery.trim()) return alleChats;
+    return alleChats.filter((chat) =>
+      chat.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [alleChats, searchQuery]);
+
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={sichtbareChats}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <ChatListItem
-            chat={item}
-            letzteNachricht={letzteNachrichten[item.id] ?? ""}
-            onPress={() => router.push(`/chat/${item.id}`)}
+    <ImageBackground
+      source={require("../../assets/images/pack8.jpg")} // Pfad zu deinem statischen Asset hier anpassen
+      style={styles.container}
+      resizeMode="cover"
+    >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        {/* Minimalistischer Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Chats</Text>
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={18} color="#666" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Suchen..."
+              placeholderTextColor="#888"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")}>
+                <Ionicons name="close-circle" size={18} color="#666" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Zusammenhängendes Glassmorphism-Panel ohne Lücken */}
+        <View style={styles.listWrapper}>
+          <FlatList
+            data={sichtbareChats}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <ChatListItem
+                chat={item}
+                letzteNachricht={letzteNachrichten[item.id] ?? ""}
+                onPress={() => router.push(`/chat/${item.id}`)}
+              />
+            )}
+            ItemSeparatorComponent={Trennlinie}
           />
-        )}
-        ItemSeparatorComponent={Trennlinie}
-        contentContainerStyle={{ paddingTop: insets.top + 44, paddingBottom: 110 }}
-      />
-    </View>
+        </View>
+      </KeyboardAvoidingView>
+    </ImageBackground>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
   },
+  header: {
+    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: "#1a1a1a",
+    marginBottom: 12,
+    letterSpacing: -0.5,
+  },
+  // Minimalistische Glassmorphism-Suchleiste
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.5)", 
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.6)",
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1a1a1a",
+  },
+  // Die umschließende "Glasscheibe" für die gesamte Liste
+  listWrapper: {
+    flex: 1,
+    marginHorizontal: 20,
+    marginBottom: Platform.OS === "ios" ? 30 : 20,
+    borderRadius: 24,
+    overflow: "hidden", // Verhindert, dass Ecken der Items herausragen
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.5)",
+  },
+  listContent: {
+    paddingVertical: 4,
+  },
+  // Keine Abstände/Marginale mehr zwischen den Items
   item: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
+    paddingVertical: 14,
+    backgroundColor: "transparent",
   },
   avatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
   avatarPlatzhalter: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "#b0b0b8",
-    justifyContent: "flex-end",
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
+    justifyContent: "center",
     alignItems: "center",
-    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.8)",
   },
   textBereich: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 14,
     justifyContent: "center",
   },
   name: {
     fontSize: 16,
     fontWeight: "700",
     color: "#1a1a1a",
-    marginBottom: 3,
+    marginBottom: 2,
   },
   vorschau: {
-    fontSize: 14,
-    color: "#888",
+    fontSize: 13,
+    color: "#555",
   },
   trennlinie: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "#e0e0e0",
-    marginLeft: 82,
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+    marginLeft: 80, // Schließt bündig nach dem Avatar ab
   },
 });

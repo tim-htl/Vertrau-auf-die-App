@@ -213,7 +213,7 @@ export default function TreffenScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#faf6e6",
+    backgroundColor: "#fff7fb",
   },
 
   itemContainer: {
@@ -225,9 +225,9 @@ const styles = StyleSheet.create({
     borderRadius: 35,
     backgroundColor: "#f8f8f6",
     overflow: "hidden",
-    shadowColor: "#ff5c5c",
+    shadowColor: "##7d7d7d",
     shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.28,
+    shadowOpacity: 0.5,
     shadowRadius: 24,
     elevation: 12,
   },

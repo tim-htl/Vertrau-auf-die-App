@@ -5,7 +5,6 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
-  Image,
   ImageBackground,
   PanResponder,
   Pressable,
@@ -18,21 +17,17 @@ import {
   ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { hobbyIcon } from "../../data/hobbies";
+
+import { PhotoStripCard } from "../../components/PhotoStripCard";
 import { DEMO_PERSONEN, type Person } from "../../data/personen";
 import { likePerson, resetSwipes } from "../../data/swipes";
 
-// Put the uploaded image into your project here:
-// assets/images/static-background.jpeg
-// If your screen file is in another folder, adjust this relative path.
 const STATIC_BACKGROUND = require("../../assets/images/pack9.jpg");
 
 const SCREEN_BG = "#FFFFFF";
 const CARD_BG = "rgba(255,255,255,0.12)";
-const PHOTO_STRIP_GLASS_BG = "rgba(255,255,255,0.90)";
 const TEXT = "#1A1A1A";
 const MUTED = "#8E8E93";
-const LINE = "rgba(35, 35, 35, 0.12)";
 
 function AppHintergrund({
   children,
@@ -51,134 +46,6 @@ function AppHintergrund({
       <View pointerEvents="none" style={styles.hintergrundOverlay} />
       {children}
     </ImageBackground>
-  );
-}
-
-function BildPlatzhalter({ size }: { size: number }) {
-  return (
-    <View style={[styles.bildPlatzhalter, styles.neuSoftInset, { width: size, height: size }]}> 
-      <Ionicons name="person" size={size * 0.5} color="#C7C7CC" style={{ marginTop: size * 0.08 }} />
-    </View>
-  );
-}
-
-function InfoZeile({ label, wert }: { label: string; wert: string }) {
-  return (
-    <View style={styles.infoZeile}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoWert}>{wert}</Text>
-    </View>
-  );
-}
-
-function TagReihe({
-  label,
-  items,
-  mitIcons = false,
-}: {
-  label: string;
-  items: string[];
-  mitIcons?: boolean;
-}) {
-  return (
-    <View style={styles.infoZeile}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <View style={styles.tagReihe}>
-        {items.map((item, i) => (
-          <View key={i} style={[styles.tag, styles.neuSoft]}>
-            {mitIcons && (
-              <Ionicons name={hobbyIcon(item)} size={12} color={TEXT} style={{ marginRight: 4 }} />
-            )}
-            <Text style={styles.tagText}>{item}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-export function PersonenKarte({
-  person,
-  breite,
-  hoehe,
-}: {
-  person: Person;
-  breite: number;
-  hoehe: number;
-}) {
-  const cardBreite = breite;
-  const cardHoehe = hoehe;
-
-  const seitenPadding = 18;
-  const stripLinksAbstand = 10;
-  const stripRechtsPadding = 10;
-  const spaltenGap = 26;
-  const innenBreite = cardBreite - seitenPadding * 2;
-  const bildSpalteBreite = innenBreite * 0.28;
-
-  const glasBreite =
-    seitenPadding - stripLinksAbstand + bildSpalteBreite + stripRechtsPadding;
-  const infoSpalteBreite = innenBreite - bildSpalteBreite - spaltenGap;
-
-  const anzahlBilder = 5;
-  const bildAbstand = 8;
-  const verfuegbarFuerBilder = cardHoehe - 34;
-  const bildKanteNachHoehe =
-    (verfuegbarFuerBilder - bildAbstand * (anzahlBilder - 1)) / anzahlBilder;
-  const bildKante = Math.min(bildSpalteBreite, bildKanteNachHoehe);
-
-  return (
-    <View style={[styles.karteAussen, { width: breite, height: hoehe }]}> 
-      <View style={[styles.karteSchatten, { width: cardBreite, height: cardHoehe }]}> 
-        <View style={styles.karteClip}>
-          <BlurView
-            pointerEvents="none"
-            tint="light"
-            intensity={62}
-            style={[styles.glasPanel, { left: stripLinksAbstand, width: glasBreite }]}
-          >
-            <View style={styles.glasWeiss} />
-          </BlurView>
-
-          <View style={[styles.zeile, { paddingHorizontal: seitenPadding, gap: spaltenGap }]}> 
-            <View style={{ width: bildSpalteBreite, gap: bildAbstand, alignItems: "center" }}> 
-              {person.bilder.slice(0, anzahlBilder).map((bild, i) =>
-                bild ? (
-                  <View
-                    key={i}
-                    style={[styles.bildRahmen, styles.neuSoft, { width: bildKante, height: bildKante }]}
-                  >
-                    <Image source={{ uri: bild }} style={styles.bild} />
-                  </View>
-                ) : (
-                  <View
-                    key={i}
-                    style={[styles.bildRahmen, styles.neuSoft, { width: bildKante, height: bildKante }]}
-                  >
-                    <BildPlatzhalter size={bildKante} />
-                  </View>
-                )
-              )}
-            </View>
-
-            <View style={[styles.infoSpalte, { width: infoSpalteBreite }]}> 
-              <Text style={styles.nameText} numberOfLines={1}>
-                {person.name}
-              </Text>
-              <Text style={styles.alterText}>{person.alter} Jahre</Text>
-
-              <View style={styles.trennerOben} />
-
-              <InfoZeile label="Bio" wert={person.kurzbeschreibung} />
-              <InfoZeile label="Uni" wert={person.uni} />
-              <InfoZeile label="Studiengang" wert={person.studiengang} />
-              <TagReihe label="Module" items={person.module} />
-              <TagReihe label="Hobbies" items={person.hobbies} mitIcons />
-            </View>
-          </View>
-        </View>
-      </View>
-    </View>
   );
 }
 
@@ -270,7 +137,17 @@ function SwipeKarte({
         style={{ backgroundColor: "transparent", transform: [{ translateX }, { rotate: rotation }] }}
       >
         <Pressable onPress={onOeffnen}>
-          <PersonenKarte person={person} breite={breite} hoehe={hoehe} />
+          <PhotoStripCard
+            name={person.name}
+            alter={person.alter}
+            bio={person.kurzbeschreibung}
+            uni={person.uni}
+            studiengang={person.studiengang}
+            module={person.module}
+            hobbies={person.hobbies}
+            bilder={person.bilder}
+            cardHeight={hoehe}
+          />
         </Pressable>
       </Animated.View>
     </View>
@@ -282,7 +159,6 @@ export default function PersonenScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   
-  // Angepasst an den neuen schmalen Header und die TabBar Höhe
   const headerHeight = insets.top + 10;
   const bottomBarHeight = 80;
   const karteHoehe = height - headerHeight - bottomBarHeight;
@@ -328,12 +204,7 @@ export default function PersonenScreen() {
 
   if (feed.length === 0) {
     return (
-      <AppHintergrund
-        style={[
-          styles.leerContainer,
-          { paddingTop: headerHeight },
-        ]}
-      >
+      <AppHintergrund style={[styles.leerContainer, { paddingTop: headerHeight }]}>
         <View style={[styles.leerKarte, styles.karteSchatten]}> 
           <View style={styles.leerKarteInnen}>
             <BlurView tint="light" intensity={34} style={StyleSheet.absoluteFill} />
@@ -348,9 +219,7 @@ export default function PersonenScreen() {
               style={[styles.resetKnopf, styles.neuSoft]}
               onPress={demoZuruecksetzen}
             >
-              <Text style={styles.resetKnopfText}>
-                Demo zurücksetzen
-              </Text>
+              <Text style={styles.resetKnopfText}>Demo zurücksetzen</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -403,261 +272,31 @@ export default function PersonenScreen() {
 }
 
 const styles = StyleSheet.create({
-  hintergrund: {
-    flex: 1,
-    backgroundColor: SCREEN_BG,
-  },
-  hintergrundBild: {
-    opacity: 1,
-  },
-  hintergrundOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,255,255,0.16)",
-  },
-  liste: {
-    backgroundColor: "transparent",
-  },
-  karteAussen: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  karteSchatten: {
-    borderRadius: 0,
-    backgroundColor: CARD_BG,
-    elevation: 0,
-  },
-  karteClip: {
-    flex: 1,
-    overflow: "hidden",
-  },
-  glasPanel: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    overflow: "hidden",
-    borderRadius: 24,
-    backgroundColor: "rgba(255, 255, 255, 0.4)",
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 0,
-    borderColor: "white",
-    shadowColor: "#FFFFFF",
-    shadowOpacity: 0.22,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 0,
-    zIndex: 2,
-  },
-  glasWeiss: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,255,255,0.18)",
-  },
-  neuSoft: {
-    shadowColor: "#D8DDE3",
-    shadowOpacity: 0.50,
-    shadowRadius: 7,
-    shadowOffset: { width: 3, height: 3 },
-    elevation: 3,
-  },
-  neuSoftStrong: {
-    shadowColor: "#D8DDE3",
-    shadowOpacity: 0.9,
-    shadowRadius: 10,
-    shadowOffset: { width: 5, height: 5 },
-    elevation: 5,
-  },
-  neuSoftInset: {
-    shadowColor: "#BFC5CC",
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-    shadowOffset: { width: 2, height: 2 },
-    elevation: 2,
-  },
-  neuMatch: {
-    shadowColor: "#1E9E4A",
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    shadowOffset: { width: 4, height: 5 },
-    elevation: 6,
-  },
-  ladeFlaeche: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: "40%",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ladeKreis: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: "rgba(232,248,238,0.86)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.62)",
-  },
-  matchBanner: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    zIndex: 100,
-  },
-  matchBannerInhalt: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "rgba(52,199,89,0.92)",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  matchBannerTitel: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  matchBannerText: {
-    color: "rgba(255,255,255,0.9)",
-    fontSize: 13,
-    marginTop: 1,
-  },
-  leerContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 22,
-  },
-  leerKarte: {
-    width: "100%",
-    maxWidth: 360,
-    height: 320,
-  },
-  leerKarteInnen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 28,
-    overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.34)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.60)",
-  },
-  leerGlasPanel: {
-    position: "absolute",
-    top: 8,
-    bottom: 8,
-    left: 8,
-    width: "43%",
-    borderRadius: 24,
-    backgroundColor: "rgba(255,255,255,0.30)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.58)",
-  },
-  leerTitel: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: TEXT,
-    marginTop: 8,
-  },
-  leerText: {
-    fontSize: 14,
-    color: MUTED,
-    textAlign: "center",
-  },
-  resetKnopf: {
-    marginTop: 16,
-    backgroundColor: "rgba(255,255,255,0.58)",
-    borderRadius: 14,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.62)",
-  },
-  resetKnopfText: {
-    color: "#007AFF",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  zeile: {
-    flexDirection: "row",
-    flex: 1,
-    paddingTop: 16,
-    paddingBottom: 16,
-    zIndex: 3,
-  },
-  infoSpalte: {
-    flex: 1,
-    paddingTop: 4,
-  },
-  bildRahmen: {
-    backgroundColor: "rgba(255,255,255,0.36)",
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.64)",
-  },
-  bild: {
-    width: "100%",
-    height: "100%",
-  },
-  bildPlatzhalter: {
-    backgroundColor: "rgba(245,245,245,0.50)",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-  nameText: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: TEXT,
-    letterSpacing: -0.5,
-  },
-  alterText: {
-    fontSize: 15,
-    color: MUTED,
-    marginTop: 2,
-    fontWeight: "500",
-  },
-  trennerOben: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: LINE,
-    marginVertical: 10,
-  },
-  infoZeile: {
-    marginBottom: 45,
-  },
-  infoLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: MUTED,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-  infoWert: {
-    fontSize: 14,
-    color: TEXT,
-    lineHeight: 19,
-  },
-  tagReihe: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 5,
-  },
-  tag: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.48)",
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.54)",
-  },
-  tagText: {
-    fontSize: 12,
-    color: TEXT,
-    fontWeight: "500",
-  },
+  hintergrund: { flex: 1, backgroundColor: SCREEN_BG },
+  hintergrundBild: { opacity: 1 },
+  hintergrundOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(255,255,255,0.16)" },
+  
+  liste: { backgroundColor: "transparent" },
+  karteSchatten: { borderRadius: 0, backgroundColor: CARD_BG, elevation: 0 },
+  
+  neuSoft: { shadowColor: "#D8DDE3", shadowOpacity: 0.50, shadowRadius: 7, shadowOffset: { width: 3, height: 3 }, elevation: 3 },
+  neuSoftStrong: { shadowColor: "#D8DDE3", shadowOpacity: 0.9, shadowRadius: 10, shadowOffset: { width: 5, height: 5 }, elevation: 5 },
+  neuMatch: { shadowColor: "#1E9E4A", shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 4, height: 5 }, elevation: 6 },
+  
+  ladeFlaeche: { position: "absolute", left: 0, top: 0, width: "40%", alignItems: "center", justifyContent: "center" },
+  ladeKreis: { width: 88, height: 88, borderRadius: 44, backgroundColor: "rgba(232,248,238,0.86)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.62)" },
+  
+  matchBanner: { position: "absolute", left: 16, right: 16, zIndex: 100 },
+  matchBannerInhalt: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(52,199,89,0.92)", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12 },
+  matchBannerTitel: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  matchBannerText: { color: "rgba(255,255,255,0.9)", fontSize: 13, marginTop: 1 },
+  
+  leerContainer: { alignItems: "center", justifyContent: "center", paddingHorizontal: 22 },
+  leerKarte: { width: "100%", maxWidth: 360, height: 320 },
+  leerKarteInnen: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 28, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.34)", borderWidth: 1, borderColor: "rgba(255,255,255,0.60)" },
+  leerGlasPanel: { position: "absolute", top: 8, bottom: 8, left: 8, width: "43%", borderRadius: 24, backgroundColor: "rgba(255,255,255,0.30)", borderWidth: 1, borderColor: "rgba(255,255,255,0.58)" },
+  leerTitel: { fontSize: 18, fontWeight: "700", color: TEXT, marginTop: 8 },
+  leerText: { fontSize: 14, color: MUTED, textAlign: "center" },
+  resetKnopf: { marginTop: 16, backgroundColor: "rgba(255,255,255,0.58)", borderRadius: 14, paddingHorizontal: 18, paddingVertical: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.62)" },
+  resetKnopfText: { color: "#007AFF", fontSize: 15, fontWeight: "600" },
 });
