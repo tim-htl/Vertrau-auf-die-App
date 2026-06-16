@@ -1,158 +1,103 @@
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
-  Image,
+  ImageBackground,
   PanResponder,
+  Platform,
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   TouchableOpacity,
   useWindowDimensions,
   View,
+  ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { hobbyIcon } from "../../data/hobbies";
+
+import { PhotoStripCard } from "../../components/PhotoStripCard";
 import { DEMO_PERSONEN, type Person } from "../../data/personen";
-import { ladeGelikte, likePerson, resetSwipes } from "../../data/swipes";
+import { likePerson, resetSwipes } from "../../data/swipes";
 
-// ─── Bild-Platzhalter ─────────────────────────────────────────────────────────
+const STATIC_BACKGROUND = require("../../assets/images/pack9.jpg");
 
-function BildPlatzhalter({ size }: { size: number }) {
-  return (
-    <View style={[styles.bildPlatzhalter, { width: size, height: size }]}>
-      <Ionicons name="person" size={size * 0.5} color="#fff" style={{ marginTop: size * 0.08 }} />
-    </View>
-  );
-}
+const SCREEN_BG = "#FFFFFF";
+const CARD_BG = "rgba(255,255,255,0.12)";
+const TEXT = "#1A1A1A";
+const MUTED = "#8E8E93";
+const FUN_PINK = "#FF9A9E";
+const FUN_GREEN = "#34C759";
 
-// ─── Info-Zeile (Label + Wert) ────────────────────────────────────────────────
+const DISPLAY_FONT = Platform.select({
+  ios: "Avenir Next",
+  android: "sans-serif-condensed",
+  default: undefined,
+});
 
-function InfoZeile({ label, wert }: { label: string; wert: string }) {
-  return (
-    <View style={styles.infoZeile}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoWert}>{wert}</Text>
-    </View>
-  );
-}
+const FUN_TYPO = {
+  title: {
+    fontFamily: DISPLAY_FONT,
+    color: TEXT,
+    fontSize: 27,
+    lineHeight: 31,
+    fontWeight: "900",
+    letterSpacing: -0.9,
+    textAlign: "center",
+  },
 
-// ─── Tag-Reihe ────────────────────────────────────────────────────────────────
+  bannerTitle: {
+    fontFamily: DISPLAY_FONT,
+    color: "#fff",
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
 
-function TagReihe({
-  label,
-  items,
-  mitIcons = false,
+  body: {
+    fontFamily: DISPLAY_FONT,
+    color: MUTED,
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+
+  button: {
+    fontFamily: DISPLAY_FONT,
+    color: TEXT,
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+} as const;
+
+function AppHintergrund({
+  children,
+  style,
 }: {
-  label: string;
-  items: string[];
-  mitIcons?: boolean;
+  children?: ReactNode;
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <View style={styles.infoZeile}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <View style={styles.tagReihe}>
-        {items.map((item, i) => (
-          <View key={i} style={styles.tag}>
-            {mitIcons && (
-              <Ionicons name={hobbyIcon(item)} size={12} color="#1a1a1a" style={{ marginRight: 4 }} />
-            )}
-            <Text style={styles.tagText}>{item}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
+    <ImageBackground
+      source={STATIC_BACKGROUND}
+      resizeMode="cover"
+      style={[styles.hintergrund, style]}
+      imageStyle={styles.hintergrundBild}
+    >
+      <View pointerEvents="none" style={styles.hintergrundOverlay} />
+      {children}
+    </ImageBackground>
   );
 }
-
-// ─── Personen-Karte ───────────────────────────────────────────────────────────
-
-export function PersonenKarte({
-  person,
-  breite,
-  hoehe,
-}: {
-  person: Person;
-  breite: number;
-  hoehe: number;
-}) {
-  // Seitenabstand und Spaltenaufteilung
-  const seitenPadding = 16;
-  const spaltenGap = 14;
-  const innenBreite = breite - seitenPadding * 2;
-  const bildSpalteBreite = innenBreite * 0.33; // ca. ein Drittel
-  const infoSpalteBreite = innenBreite - bildSpalteBreite - spaltenGap;
-
-  // Fotostreifen: 5 Bilder, dynamisch eingepasst damit alle sichtbar sind
-  const anzahlBilder = 5;
-  const bildAbstand = 8;
-  const verfuegbarFuerBilder = hoehe - 32; // padding oben/unten abziehen
-  const bildKanteNachHoehe =
-    (verfuegbarFuerBilder - bildAbstand * (anzahlBilder - 1)) / anzahlBilder;
-  // Bilder bleiben quadratisch – kleinere Seite gewinnt
-  const bildKante = Math.min(bildSpalteBreite, bildKanteNachHoehe);
-
-  return (
-    <View style={[styles.karte, { width: breite, height: hoehe }]}>
-      <View style={[styles.zeile, { paddingHorizontal: seitenPadding, gap: spaltenGap }]}>
-        {/* Linke Spalte: Fotostreifen */}
-        <View style={{ width: bildSpalteBreite, gap: bildAbstand, alignItems: "center" }}>
-          {person.bilder.slice(0, anzahlBilder).map((bild, i) =>
-            bild ? (
-              <Image
-                key={i}
-                source={{ uri: bild }}
-                style={{
-                  width: bildKante,
-                  height: bildKante,
-                  borderRadius: 14,
-                }}
-              />
-            ) : (
-              <View
-                key={i}
-                style={{
-                  width: bildKante,
-                  height: bildKante,
-                  borderRadius: 14,
-                  overflow: "hidden",
-                }}
-              >
-                <BildPlatzhalter size={bildKante} />
-              </View>
-            )
-          )}
-        </View>
-
-        {/* Rechte Spalte: Infos – fester Abstand (3 Zeilen) zwischen Feldern */}
-        <View style={[styles.infoSpalte, { width: infoSpalteBreite }]}>
-          <Text style={styles.nameText} numberOfLines={1}>
-            {person.name}
-          </Text>
-          <Text style={styles.alterText}>{person.alter} Jahre</Text>
-
-          <View style={styles.trennerOben} />
-
-          <InfoZeile label="Bio" wert={person.kurzbeschreibung} />
-          <InfoZeile label="Uni" wert={person.uni} />
-          <InfoZeile label="Studiengang" wert={person.studiengang} />
-          <TagReihe label="Module" items={person.module} />
-          <TagReihe label="Hobbies" items={person.hobbies} mitIcons />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// ─── Swipe-Karte (Tinder-Mechanik, nur Rechts-Swipe = Like) ───────────────────
-//
-// Die Karte folgt dem Finger nach rechts (leichte Rotation + "FREUNDE?"-
-// Badge), ab der Schwelle fliegt sie raus und löst das Like aus. Links
-// gibt es nur Widerstand (kein Pass — bewusste Entscheidung). Vertikales
-// Blättern der FlatList bleibt unberührt: der PanResponder greift nur,
-// wenn die Bewegung klar horizontal ist.
 
 function SwipeKarte({
   person,
@@ -167,18 +112,14 @@ function SwipeKarte({
   hoehe: number;
   onLike: () => void;
   onOeffnen: () => void;
-  // Meldet, ob gerade horizontal gezogen wird — die FlatList schaltet
-  // dann ihr vertikales Scrollen ab, damit leichtes vertikales
-  // Verrutschen den Swipe nicht abbricht.
   onPanAktiv?: (aktiv: boolean) => void;
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
   const schwelle = breite * 0.35;
 
-  // PanResponder wird einmal erzeugt — Callbacks per Ref aktuell halten,
-  // damit keine veraltete Closure feuert.
   const onLikeRef = useRef(onLike);
   onLikeRef.current = onLike;
+
   const onPanAktivRef = useRef(onPanAktiv);
   onPanAktivRef.current = onPanAktiv;
 
@@ -194,16 +135,13 @@ function SwipeKarte({
       onMoveShouldSetPanResponder: (_e, g) =>
         Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
       onPanResponderGrant: () => onPanAktivRef.current?.(true),
-      // Einmal beansprucht, wird die Geste NICHT mehr an die Liste
-      // abgegeben — sonst klaut deren Scroll den Swipe bei vertikalem
-      // Verrutschen.
       onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_e, g) => {
-        // nach links nur mit starkem Widerstand (kein Pass)
         translateX.setValue(g.dx > 0 ? g.dx : g.dx / 5);
       },
       onPanResponderRelease: (_e, g) => {
         onPanAktivRef.current?.(false);
+
         if (g.dx > schwelle) {
           Animated.timing(translateX, {
             toValue: breite * 1.3,
@@ -226,13 +164,12 @@ function SwipeKarte({
     outputRange: ["-6deg", "0deg", "6deg"],
   });
 
-  // "Aufladung": 0 → 1, voll geladen an der Auslöse-Schwelle. Steuert
-  // Sichtbarkeit und Größe des Kreises in der links freiwerdenden Fläche.
   const ladung = translateX.interpolate({
     inputRange: [0, schwelle],
     outputRange: [0, 1],
     extrapolate: "clamp",
   });
+
   const ladeSkala = translateX.interpolate({
     inputRange: [0, schwelle],
     outputRange: [0.4, 1],
@@ -241,81 +178,104 @@ function SwipeKarte({
 
   return (
     <View style={{ width: breite, height: hoehe }}>
-      {/* Lade-Anzeige HINTER der Karte — wird sichtbar, wo die Karte
-          beim Ziehen nach rechts Fläche freigibt */}
       <Animated.View
-        style={[styles.ladeFlaeche, { height: hoehe, opacity: ladung }]}
         pointerEvents="none"
+        style={[styles.ladeFlaeche, { height: hoehe, opacity: ladung }]}
       >
-        <Animated.View style={[styles.ladeKreis, { transform: [{ scale: ladeSkala }] }]}>
-          <Ionicons name="people" size={44} color="#34C759" />
+        <Animated.View
+          style={[
+            styles.ladeKreis,
+            styles.neuSoftStrong,
+            { transform: [{ scale: ladeSkala }] },
+          ]}
+        >
+          <Ionicons name="people" size={44} color={FUN_GREEN} />
         </Animated.View>
       </Animated.View>
 
-      {/* Weißer Hintergrund auf der Karte, damit sie die Lade-Anzeige
-          verdeckt, solange sie nicht verschoben ist */}
       <Animated.View
         {...panResponder.panHandlers}
-        style={{ backgroundColor: "#fff", transform: [{ translateX }, { rotate: rotation }] }}
+        style={{
+          backgroundColor: "transparent",
+          transform: [{ translateX }, { rotate: rotation }],
+        }}
       >
         <Pressable onPress={onOeffnen}>
-          <PersonenKarte person={person} breite={breite} hoehe={hoehe} />
+          <PhotoStripCard
+            name={person.name}
+            alter={person.alter}
+            bio={person.kurzbeschreibung}
+            uni={person.uni}
+            studiengang={person.studiengang}
+            module={person.module}
+            hobbies={person.hobbies}
+            bilder={person.bilder}
+            cardHeight={hoehe}
+          />
         </Pressable>
       </Animated.View>
     </View>
   );
 }
 
-// ─── Haupt-Screen ─────────────────────────────────────────────────────────────
-
 export default function PersonenScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const TAB_BAR = 49;
 
-  // Exakter sichtbarer Bereich pro Profil – KEIN top padding oben (sonst
-  // verschiebt sich der Abstand beim Swipen zwischen Profilen).
-  const karteHoehe = height - insets.top - TAB_BAR - insets.bottom;
+  const headerHeight = insets.top + 10;
+  const bottomBarHeight = 80;
+  const karteHoehe = height - headerHeight - bottomBarHeight;
 
-  // Feed = Demo-Personen minus bereits gelikte (persistiert)
   const [feed, setFeed] = useState<Person[] | null>(null);
-
-  // false, solange eine Karte horizontal gezogen wird — verhindert,
-  // dass vertikales Verrutschen den Swipe abbricht
   const [listeScrollbar, setListeScrollbar] = useState(true);
+  const [matchInfo, setMatchInfo] = useState<{
+    name: string;
+    chatId: string;
+  } | null>(null);
 
-  // Match-Banner ("dezenter Hinweis" statt Vollbild-Overlay)
-  const [matchInfo, setMatchInfo] = useState<{ name: string; chatId: string } | null>(null);
   const bannerY = useRef(new Animated.Value(-120)).current;
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    ladeGelikte().then((gelikte) =>
-      setFeed(DEMO_PERSONEN.filter((p) => !gelikte.includes(p.id)))
-    );
+    setFeed(DEMO_PERSONEN);
+
     return () => {
-      if (bannerTimer.current) clearTimeout(bannerTimer.current);
+      if (bannerTimer.current) {
+        clearTimeout(bannerTimer.current);
+      }
     };
   }, []);
 
   function zeigeMatchBanner(name: string, chatId: string) {
     setMatchInfo({ name, chatId });
-    Animated.spring(bannerY, { toValue: 0, friction: 7, useNativeDriver: true }).start();
-    if (bannerTimer.current) clearTimeout(bannerTimer.current);
+
+    Animated.spring(bannerY, {
+      toValue: 0,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+
+    if (bannerTimer.current) {
+      clearTimeout(bannerTimer.current);
+    }
+
     bannerTimer.current = setTimeout(verbergeMatchBanner, 4000);
   }
 
   function verbergeMatchBanner() {
-    Animated.timing(bannerY, { toValue: -120, duration: 250, useNativeDriver: true }).start(
-      () => setMatchInfo(null)
-    );
+    Animated.timing(bannerY, {
+      toValue: -120,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => setMatchInfo(null));
   }
 
   async function personGeliked(person: Person) {
-    // Karte sofort aus dem Feed nehmen, dann Like verarbeiten
     setFeed((f) => (f ? f.filter((p) => p.id !== person.id) : f));
+
     const ergebnis = await likePerson(person);
+
     if (ergebnis.match && ergebnis.chatId) {
       zeigeMatchBanner(person.name, ergebnis.chatId);
     }
@@ -327,24 +287,44 @@ export default function PersonenScreen() {
   }
 
   if (feed === null) {
-    return <View style={styles.hintergrund} />;
+    return <AppHintergrund />;
   }
 
   if (feed.length === 0) {
     return (
-      <View style={[styles.hintergrund, styles.leerContainer, { paddingTop: insets.top }]}>
-        <Ionicons name="people-outline" size={48} color="#C7C7CC" />
-        <Text style={styles.leerTitel}>Keine weiteren Profile</Text>
-        <Text style={styles.leerText}>Du hast alle Profile durchgeswiped.</Text>
-        <TouchableOpacity style={styles.resetKnopf} onPress={demoZuruecksetzen}>
-          <Text style={styles.resetKnopfText}>Demo zurücksetzen</Text>
-        </TouchableOpacity>
-      </View>
+      <AppHintergrund style={[styles.leerContainer, { paddingTop: headerHeight }]}> 
+        <View style={[styles.leerKarte, styles.karteSchatten]}>
+          <View style={styles.leerKarteInnen}>
+            <BlurView tint="light" intensity={34} style={StyleSheet.absoluteFill} />
+            <View style={styles.leerGlasPanel} />
+
+            <View style={[styles.leerIconBubble, styles.neuSoftStrong]}>
+              <Ionicons name="people-outline" size={42} color={FUN_PINK} />
+            </View>
+
+            <Text style={styles.leerTitel} numberOfLines={2}>
+              für heute warst du genug am Handy :)
+            </Text>
+
+            <Text style={styles.leerText} numberOfLines={2}>
+              gönn dir eine Pause — morgen warten neue Leute auf dich.
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.82}
+              style={[styles.resetKnopf, styles.neuSoft]}
+              onPress={demoZuruecksetzen}
+            >
+              <Text style={styles.resetKnopfText}>Demo zurücksetzen</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </AppHintergrund>
     );
   }
 
   return (
-    <View style={[styles.hintergrund, { paddingTop: insets.top }]}>
+    <AppHintergrund>
       <FlatList
         data={feed}
         keyExtractor={(item) => item.id}
@@ -353,7 +333,11 @@ export default function PersonenScreen() {
         showsVerticalScrollIndicator={false}
         decelerationRate="fast"
         snapToInterval={karteHoehe}
-        snapToAlignment="start"
+        style={styles.liste}
+        contentContainerStyle={{
+          paddingTop: headerHeight,
+          paddingBottom: bottomBarHeight,
+        }}
         renderItem={({ item }) => (
           <SwipeKarte
             person={item}
@@ -364,53 +348,95 @@ export default function PersonenScreen() {
             onPanAktiv={(aktiv) => setListeScrollbar(!aktiv)}
           />
         )}
-        getItemLayout={(_, index) => ({
-          length: karteHoehe,
-          offset: karteHoehe * index,
-          index,
-        })}
       />
 
-      {/* Match-Banner */}
       {matchInfo && (
         <Animated.View
           style={[
             styles.matchBanner,
-            { top: insets.top + 8, transform: [{ translateY: bannerY }] },
+            {
+              top: headerHeight + 8,
+              transform: [{ translateY: bannerY }],
+            },
           ]}
         >
           <TouchableOpacity
-            style={styles.matchBannerInhalt}
-            activeOpacity={0.85}
+            activeOpacity={0.88}
+            style={[styles.matchBannerInhalt, styles.neuMatch]}
             onPress={() => {
-              const chatId = matchInfo.chatId;
               verbergeMatchBanner();
-              router.push(`/chat/${chatId}`);
+              router.push(`/chat/${matchInfo.chatId}`);
             }}
           >
-            <Ionicons name="people" size={22} color="#fff" />
+            <View style={styles.matchIconBubble}>
+              <Ionicons name="people" size={22} color="#fff" />
+            </View>
+
             <View style={{ flex: 1 }}>
-              <Text style={styles.matchBannerTitel}>Ihr seid jetzt Freunde! 🎉</Text>
-              <Text style={styles.matchBannerText}>
-                {matchInfo.name} hat dich auch geliked — tippe, um zu chatten.
+              <Text style={styles.matchBannerTitel} numberOfLines={1}>
+                Ihr seid jetzt Freunde! 🎉
+              </Text>
+
+              <Text style={styles.matchBannerText} numberOfLines={2}>
+                {matchInfo.name} hat dich auch geliked.
               </Text>
             </View>
           </TouchableOpacity>
         </Animated.View>
       )}
-    </View>
+    </AppHintergrund>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   hintergrund: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: SCREEN_BG,
   },
 
-  // Lade-Anzeige hinter der Swipe-Karte (links freiwerdende Fläche)
+  hintergrundBild: {
+    opacity: 1,
+  },
+
+  hintergrundOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+
+  liste: {
+    backgroundColor: "transparent",
+  },
+
+  karteSchatten: {
+    borderRadius: 0,
+    backgroundColor: CARD_BG,
+    elevation: 0,
+  },
+
+  neuSoft: {
+    shadowColor: "#D8DDE3",
+    shadowOpacity: 0.5,
+    shadowRadius: 7,
+    shadowOffset: { width: 3, height: 3 },
+    elevation: 3,
+  },
+
+  neuSoftStrong: {
+    shadowColor: "#D8DDE3",
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    shadowOffset: { width: 5, height: 5 },
+    elevation: 5,
+  },
+
+  neuMatch: {
+    shadowColor: "#1E9E4A",
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 4, height: 5 },
+    elevation: 6,
+  },
+
   ladeFlaeche: {
     position: "absolute",
     left: 0,
@@ -419,158 +445,129 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   ladeKreis: {
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: "#E8F8EE",
+    backgroundColor: "rgba(232,248,238,0.86)",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.62)",
   },
 
-  // Match-Banner
   matchBanner: {
     position: "absolute",
     left: 16,
     right: 16,
+    zIndex: 100,
   },
+
   matchBannerInhalt: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#34C759",
-    borderRadius: 14,
+    backgroundColor: "rgba(52,199,89,0.93)",
+    borderRadius: 22,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.42)",
   },
+
+  matchIconBubble: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   matchBannerTitel: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
+    ...FUN_TYPO.bannerTitle,
   },
+
   matchBannerText: {
-    color: "rgba(255,255,255,0.9)",
+    fontFamily: DISPLAY_FONT,
+    color: "rgba(255,255,255,0.92)",
     fontSize: 13,
+    lineHeight: 17,
+    fontWeight: "700",
     marginTop: 1,
   },
 
-  // Leerer Feed
   leerContainer: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 32,
-  },
-  leerTitel: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1a1a1a",
-    marginTop: 8,
-  },
-  leerText: {
-    fontSize: 14,
-    color: "#8E8E93",
-    textAlign: "center",
-  },
-  resetKnopf: {
-    marginTop: 16,
-    backgroundColor: "#F2F2F7",
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  resetKnopfText: {
-    color: "#007AFF",
-    fontSize: 15,
-    fontWeight: "600",
+    paddingHorizontal: 22,
   },
 
-  karte: {
-    justifyContent: "flex-start",
-    paddingTop: 16,
+  leerKarte: {
+    width: "100%",
+    maxWidth: 360,
+    height: 342,
   },
 
-  zeile: {
-    flexDirection: "row",
+  leerKarteInnen: {
     flex: 1,
-    paddingBottom: 16,
-  },
-
-  // Rechte Spalte: alle Felder linksbündig, fester Abstand (3 Zeilen ≈ 45px)
-  infoSpalte: {
-    flex: 1,
-    paddingTop: 4,
-  },
-
-  // Bild-Platzhalter (Apple-Kontakte-Stil)
-  bildPlatzhalter: {
-    backgroundColor: "#C7C7CC",
-    justifyContent: "flex-end",
     alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 30,
     overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.34)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.60)",
+    paddingHorizontal: 24,
   },
 
-  // Infos rechts
-  nameText: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#1a1a1a",
-    letterSpacing: -0.5,
-  },
-  alterText: {
-    fontSize: 15,
-    color: "#8E8E93",
-    marginTop: 2,
-    fontWeight: "500",
-  },
-  trenner: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: "#e5e5ea",
-  },
-  trennerOben: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: "#e5e5ea",
-    marginVertical: 10,
+  leerGlasPanel: {
+    position: "absolute",
+    top: 8,
+    bottom: 8,
+    left: 8,
+    width: "43%",
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.30)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.58)",
   },
 
-  infoZeile: {
-    marginBottom: 45, // ~3 Zeilen Abstand (lineHeight 15 × 3)
-  },
-  infoLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#8E8E93",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-  infoWert: {
-    fontSize: 14,
-    color: "#1a1a1a",
-    lineHeight: 19,
-  },
-
-  tagReihe: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 5,
-  },
-  tag: {
-    flexDirection: "row",
+  leerIconBubble: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    backgroundColor: "rgba(255,255,255,0.78)",
     alignItems: "center",
-    backgroundColor: "#F2F2F7",
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.72)",
+    marginBottom: 12,
   },
-  tagText: {
-    fontSize: 12,
-    color: "#1a1a1a",
-    fontWeight: "500",
+
+  leerTitel: {
+    ...FUN_TYPO.title,
+    marginTop: 2,
+  },
+
+  leerText: {
+    ...FUN_TYPO.body,
+    marginTop: 8,
+    maxWidth: 270,
+  },
+
+  resetKnopf: {
+    marginTop: 18,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    borderRadius: 999,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.72)",
+  },
+
+  resetKnopfText: {
+    ...FUN_TYPO.button,
   },
 });

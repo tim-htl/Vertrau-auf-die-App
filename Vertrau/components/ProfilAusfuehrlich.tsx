@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
 import {
   Image,
@@ -7,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -36,7 +38,9 @@ export type ApProfil = {
   frageAntworten: FrageAntwort[];
 };
 
-// ─── Bilder-Carousel (Muster aus aktivitaet/[id]) ─────────────────────────────
+export type ProfilEditBereich = "bio" | "module" | "hobbies";
+
+// ─── Bilder-Carousel ──────────────────────────────────────────────────────────
 
 function BilderCarousel({
   bilder,
@@ -45,16 +49,15 @@ function BilderCarousel({
 }: {
   bilder: string[];
   breite: number;
-  // Meldet, ob der Finger gerade auf dem Carousel liegt. Der KP↔AP-Pager
-  // im Profil-Tab schaltet sich dann ab, damit horizontale Swipes hier
-  // das Bild wechseln statt der Pager-Seite (Gesten-Konflikt).
+  // Meldet, ob der Finger gerade auf dem Carousel liegt. Der äußere Pager
+  // wird dann temporär deaktiviert, damit horizontale Swipes hier
+  // das Bild wechseln statt die KP/AP-Seite.
   onTouchAktiv?: (aktiv: boolean) => void;
 }) {
   const bildHoehe = Math.round(breite * 1.1);
   const [index, setIndex] = useState(0);
-  // Bilder mit toten URIs (z. B. alte file://-Pfade aus dem Geräte-Cache)
-  // laden nicht — die fliegen via onError raus statt als leere Seite
-  // im Carousel zu hängen.
+
+  // Bilder mit toten URIs, z. B. alte file://-Pfade, fliegen via onError raus.
   const [kaputt, setKaputt] = useState<string[]>([]);
 
   const ladbareBilder = bilder.filter((b) => !kaputt.includes(b));
@@ -67,7 +70,25 @@ function BilderCarousel({
   if (ladbareBilder.length === 0) {
     return (
       <View style={[stile.bildPlatzhalter, { width: breite, height: bildHoehe }]}>
-        <Ionicons name="person" size={breite * 0.5} color="#fff" style={{ marginTop: breite * 0.08 }} />
+        <LinearGradient
+          colors={["#EEF0F6", "#D8DDE8"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={stile.platzhalterGradient}
+        >
+          <View
+            style={[
+              stile.avatarKreis,
+              {
+                width: breite * 0.42,
+                height: breite * 0.42,
+                borderRadius: breite * 0.21,
+              },
+            ]}
+          >
+            <Ionicons name="person" size={breite * 0.24} color="rgba(255,255,255,0.9)" />
+          </View>
+        </LinearGradient>
       </View>
     );
   }
@@ -85,6 +106,7 @@ function BilderCarousel({
         onTouchEnd={() => onTouchAktiv?.(false)}
         onTouchCancel={() => onTouchAktiv?.(false)}
         onScrollEndDrag={() => onTouchAktiv?.(false)}
+        onMomentumScrollEnd={() => onTouchAktiv?.(false)}
       >
         {ladbareBilder.map((uri) => (
           <Image
@@ -96,6 +118,7 @@ function BilderCarousel({
           />
         ))}
       </ScrollView>
+
       {ladbareBilder.length > 1 && (
         <View style={stile.dotsReihe}>
           {ladbareBilder.map((_, i) => (
@@ -118,32 +141,52 @@ function AntwortKarte({ frageAntwort }: { frageAntwort: FrageAntwort }) {
   );
 }
 
-function InfoBlock({ label, wert }: { label: string; wert: string }) {
-  return (
-    <View style={stile.infoBlock}>
+function InfoBlock({
+  label,
+  wert,
+  onPress,
+}: {
+  label: string;
+  wert: string;
+  onPress?: () => void;
+}) {
+  const inhalt = (
+    <>
       <Text style={stile.infoLabel}>{label}</Text>
       <Text style={stile.infoWert}>{wert || "—"}</Text>
-    </View>
+    </>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity activeOpacity={0.75} style={stile.infoBlock} onPress={onPress}>
+        {inhalt}
+      </TouchableOpacity>
+    );
+  }
+
+  return <View style={stile.infoBlock}>{inhalt}</View>;
 }
 
 function TagBlock({
   label,
   items,
   mitIcons = false,
+  onPress,
 }: {
   label: string;
   items: string[];
   // true bei Hobbies: zeigt das Katalog-Icon vor dem Namen
   mitIcons?: boolean;
+  onPress?: () => void;
 }) {
-  return (
-    <View style={stile.infoBlock}>
+  const inhalt = (
+    <>
       <Text style={stile.infoLabel}>{label}</Text>
       {items.length > 0 ? (
         <View style={stile.tagReihe}>
           {items.map((item, i) => (
-            <View key={i} style={stile.tag}>
+            <View key={`${item}-${i}`} style={stile.tag}>
               {mitIcons && (
                 <Ionicons name={hobbyIcon(item)} size={13} color="#1a1a1a" style={{ marginRight: 5 }} />
               )}
@@ -154,8 +197,18 @@ function TagBlock({
       ) : (
         <Text style={stile.infoWert}>—</Text>
       )}
-    </View>
+    </>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity activeOpacity={0.75} style={stile.infoBlock} onPress={onPress}>
+        {inhalt}
+      </TouchableOpacity>
+    );
+  }
+
+  return <View style={stile.infoBlock}>{inhalt}</View>;
 }
 
 // ─── Hauptkomponente ──────────────────────────────────────────────────────────
@@ -164,13 +217,17 @@ export function ProfilAusfuehrlich({
   profil,
   breite,
   onCarouselTouch,
+  bottomPadding = 0,
+  onEditBereich,
 }: {
   profil: ApProfil;
-  // Breite explizit, damit die AP auch als Pager-Seite (Profil-Tab)
-  // korrekt layoutet — useWindowDimensions als Fallback.
+  // Breite explizit, damit die AP auch als Pager-Seite korrekt layoutet.
   breite?: number;
   // Durchgereicht ans Carousel — siehe BilderCarousel.onTouchAktiv.
   onCarouselTouch?: (aktiv: boolean) => void;
+  bottomPadding?: number;
+  // Optional: nur im eigenen Profil aktiv. Fremde Profile bleiben read-only.
+  onEditBereich?: (bereich: ProfilEditBereich) => void;
 }) {
   const { width } = useWindowDimensions();
   const apBreite = breite ?? width;
@@ -180,18 +237,16 @@ export function ProfilAusfuehrlich({
   return (
     <ScrollView
       style={{ width: apBreite }}
-      contentContainerStyle={{ paddingBottom: 32 }}
+      contentContainerStyle={{ paddingBottom: 32 + bottomPadding }}
       showsVerticalScrollIndicator={false}
     >
-      <BilderCarousel
-        bilder={gefuellteBilder}
-        breite={apBreite}
-        onTouchAktiv={onCarouselTouch}
-      />
+      <BilderCarousel bilder={gefuellteBilder} breite={apBreite} onTouchAktiv={onCarouselTouch} />
 
       {/* Kopf: Name + Alter */}
       <View style={stile.kopf}>
-        <Text style={stile.nameText} numberOfLines={1}>{profil.name}</Text>
+        <Text style={stile.nameText} numberOfLines={1}>
+          {profil.name}
+        </Text>
         <Text style={stile.alterText}>{profil.alter} Jahre</Text>
       </View>
 
@@ -206,11 +261,27 @@ export function ProfilAusfuehrlich({
 
       {/* Felder der Kurzansicht */}
       <View style={stile.sektion}>
-        <InfoBlock label="Bio" wert={profil.kurzbeschreibung} />
+        <InfoBlock
+          label="Bio"
+          wert={profil.kurzbeschreibung}
+          onPress={onEditBereich ? () => onEditBereich("bio") : undefined}
+        />
+
         <InfoBlock label="Uni" wert={profil.uni} />
         <InfoBlock label="Studiengang" wert={profil.studiengang} />
-        <TagBlock label="Module" items={profil.module} />
-        <TagBlock label="Hobbies" items={profil.hobbies} mitIcons />
+
+        <TagBlock
+          label="Module"
+          items={profil.module}
+          onPress={onEditBereich ? () => onEditBereich("module") : undefined}
+        />
+
+        <TagBlock
+          label="Hobbies"
+          items={profil.hobbies}
+          mitIcons
+          onPress={onEditBereich ? () => onEditBereich("hobbies") : undefined}
+        />
       </View>
     </ScrollView>
   );
@@ -220,10 +291,19 @@ export function ProfilAusfuehrlich({
 
 const stile = StyleSheet.create({
   bildPlatzhalter: {
-    backgroundColor: "#C7C7CC",
-    justifyContent: "flex-end",
-    alignItems: "center",
     overflow: "hidden",
+  },
+  platzhalterGradient: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarKreis: {
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   dotsReihe: {
