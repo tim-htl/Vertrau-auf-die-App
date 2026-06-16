@@ -1,11 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { signOut } from "../lib/supabase";
+import { resetSwipes } from "../data/swipes";
 
 export default function SettingsScreen() {
-  const router = useRouter();
-
   const ausloggen = () => {
     Alert.alert("Ausloggen", "Möchtest du dich wirklich ausloggen?", [
       {
@@ -16,14 +15,20 @@ export default function SettingsScreen() {
         text: "Ausloggen",
         style: "destructive",
         onPress: async () => {
-          await AsyncStorage.multiRemove([
-            "user",
-            "token",
-            "profil_v2",
-            "onboarding_completed",
-          ]);
-
-          router.replace("/onboarding");
+          try {
+            // Lokale Mock-Reste + Swipe-Likes räumen, dann die ECHTE
+            // Supabase-Session aus dem SecureStore löschen → der AuthGate
+            // im RootLayout wechselt automatisch zum Login (kein router.replace
+            // nötig; /onboarding wäre mit Session ohnehin nicht erreichbar).
+            await AsyncStorage.multiRemove(["profil_v2", "onboarding_completed"]);
+            await resetSwipes();
+            await signOut();
+          } catch (e) {
+            Alert.alert(
+              "Fehler",
+              e instanceof Error ? e.message : "Ausloggen fehlgeschlagen."
+            );
+          }
         },
       },
     ]);
