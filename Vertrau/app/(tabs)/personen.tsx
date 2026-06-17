@@ -20,8 +20,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PhotoStripCard } from "../../components/PhotoStripCard";
-import { DEMO_PERSONEN, type Person } from "../../data/personen";
-import { likePerson, resetSwipes } from "../../data/swipes";
+import { type Person } from "../../data/personen";
+import { ladeSwipeFeed, likePerson } from "../../api/personen";
 
 const STATIC_BACKGROUND = require("../../assets/images/pack9.jpg");
 
@@ -238,7 +238,11 @@ export default function PersonenScreen() {
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setFeed(DEMO_PERSONEN);
+    // Swipe-Feed aus dem Backend (GET /personen/swipe) — Profile, die noch
+    // nicht geliked wurden, ohne den eigenen Account.
+    ladeSwipeFeed()
+      .then(setFeed)
+      .catch(() => setFeed([]));
 
     return () => {
       if (bannerTimer.current) {
@@ -281,9 +285,13 @@ export default function PersonenScreen() {
     }
   }
 
-  async function demoZuruecksetzen() {
-    await resetSwipes();
-    setFeed(DEMO_PERSONEN);
+  async function feedNeuLaden() {
+    setFeed(null);
+    try {
+      setFeed(await ladeSwipeFeed());
+    } catch {
+      setFeed([]);
+    }
   }
 
   if (feed === null) {
@@ -313,9 +321,9 @@ export default function PersonenScreen() {
             <TouchableOpacity
               activeOpacity={0.82}
               style={[styles.resetKnopf, styles.neuSoft]}
-              onPress={demoZuruecksetzen}
+              onPress={feedNeuLaden}
             >
-              <Text style={styles.resetKnopfText}>Demo zurücksetzen</Text>
+              <Text style={styles.resetKnopfText}>Neu laden</Text>
             </TouchableOpacity>
           </View>
         </View>
