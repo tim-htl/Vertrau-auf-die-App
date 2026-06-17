@@ -311,11 +311,12 @@ export default function PersonenScreen() {
             </View>
 
             <Text style={styles.leerTitel} numberOfLines={2}>
-              für heute warst du genug am Handy :)
+              Du hast alle Profile gesehen
             </Text>
 
-            <Text style={styles.leerText} numberOfLines={2}>
-              gönn dir eine Pause — morgen warten neue Leute auf dich.
+            <Text style={styles.leerText} numberOfLines={3}>
+              Es sind aktuell keine weiteren Profile verfügbar. Schau später
+              wieder vorbei.
             </Text>
 
             <TouchableOpacity
@@ -356,6 +357,15 @@ export default function PersonenScreen() {
             onPanAktiv={(aktiv) => setListeScrollbar(!aktiv)}
           />
         )}
+        ListFooterComponent={
+          <View style={[styles.endeSeite, { height: karteHoehe }]}>
+            <Ionicons name="checkmark-done-outline" size={40} color={MUTED} />
+            <Text style={styles.endeTitel}>Das waren alle Profile</Text>
+            <Text style={styles.endeText}>
+              Du hast alle aktuell verfügbaren Profile durchgesehen.
+            </Text>
+          </View>
+        }
       />
 
       {matchInfo && (
@@ -563,6 +573,25 @@ const styles = StyleSheet.create({
     ...FUN_TYPO.body,
     marginTop: 8,
     maxWidth: 270,
+  },
+
+  endeSeite: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  endeTitel: {
+    ...FUN_TYPO.title,
+    fontSize: 22,
+    lineHeight: 26,
+    marginTop: 12,
+    textAlign: "center",
+  },
+  endeText: {
+    ...FUN_TYPO.body,
+    marginTop: 6,
+    maxWidth: 280,
+    textAlign: "center",
   },
 
   resetKnopf: {
