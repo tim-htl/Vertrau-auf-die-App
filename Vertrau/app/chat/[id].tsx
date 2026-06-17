@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -14,10 +14,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { INITIAL_CHATS, type ChatItem, type Message, type ProposalStatus } from "../../data/chats";
-import { ladeUserChats } from "../../data/userAktivitaeten";
-
-const STORAGE_PREFIX = "messages_v4_";
+import { type ChatItem, type Message, type ProposalStatus } from "../../data/chats";
+import { ladeChats, ladeNachrichten, sendeNachricht } from "../../api/chats";
 
 // ─── Einzelne Nachricht ───────────────────────────────────────────────────────
 
@@ -194,53 +192,35 @@ export default function ChatDetailScreen() {
   const flatListRef = useRef<FlatList>(null);
   const [nachrichten, setNachrichten] = useState<Message[]>([]);
   const [eingabe, setEingabe] = useState("");
-  const [chat, setChat] = useState<ChatItem | undefined>(
-    INITIAL_CHATS.find((c) => c.id === id)
-  );
+  const [chat, setChat] = useState<ChatItem | undefined>(undefined);
 
-  // User-Chats nachladen, falls der Chat nicht in INITIAL_CHATS ist
+  // Chat-Kopf (Name/Bild/Verknüpfung) aus der Backend-Chatliste holen.
   useEffect(() => {
-    if (chat) return;
-    (async () => {
-      const userChats = await ladeUserChats();
-      const gefunden = userChats.find((c) => c.id === id);
-      if (gefunden) setChat(gefunden);
-    })();
-  }, [id, chat]);
+    ladeChats()
+      .then((chats) => setChat(chats.find((c) => c.id === id)))
+      .catch(() => {});
+  }, [id]);
 
   const istGruppe = chat?.linkType === "activity";
   const istPersonenChat = chat?.linkType === "person";
 
-  // Nachrichten laden – initial beim ersten Mount
+  // Nachrichten aus dem Backend (GET /chats/:id/messages), chronologisch.
   useEffect(() => {
-    async function laden() {
-      const key = STORAGE_PREFIX + id;
-      const gespeichert = await AsyncStorage.getItem(key);
-      if (gespeichert) {
-        setNachrichten(JSON.parse(gespeichert));
-      } else {
-        const initial = chat?.messages ?? [];
-        await AsyncStorage.setItem(key, JSON.stringify(initial));
-        setNachrichten(initial);
-      }
-    }
-    laden();
+    ladeNachrichten(id)
+      .then(setNachrichten)
+      .catch(() => setNachrichten([]));
   }, [id]);
 
-  // Nachrichten bei jedem Fokus neu aus AsyncStorage lesen – damit von anderen
-  // Screens (z.B. Treffens-Vorschlag) angehängte Nachrichten sofort erscheinen.
+  // Bei jedem Fokus neu laden – damit Nachrichten vom Gegenüber beim
+  // Zurückkehren erscheinen (kein Realtime in dieser Stufe).
   useFocusEffect(
     useCallback(() => {
       let abgebrochen = false;
-      async function neuLaden() {
-        const key = STORAGE_PREFIX + id;
-        const gespeichert = await AsyncStorage.getItem(key);
-        if (abgebrochen) return;
-        if (gespeichert) {
-          setNachrichten(JSON.parse(gespeichert));
-        }
-      }
-      neuLaden();
+      ladeNachrichten(id)
+        .then((msgs) => {
+          if (!abgebrochen) setNachrichten(msgs);
+        })
+        .catch(() => {});
       return () => {
         abgebrochen = true;
       };
@@ -323,20 +303,17 @@ export default function ChatDetailScreen() {
     });
   }
 
-  // Auf einen Treffens-Vorschlag antworten (Annehmen / Ablehnen)
-  async function beantworteProposal(
-    nachrichtId: string,
-    antwort: ProposalStatus
-  ) {
-    const aktualisiert = nachrichten.map((m) =>
-      m.id === nachrichtId && m.proposal
-        ? { ...m, proposal: { ...m.proposal, status: antwort } }
-        : m
-    );
-    setNachrichten(aktualisiert);
-    await AsyncStorage.setItem(
-      STORAGE_PREFIX + id,
-      JSON.stringify(aktualisiert)
+  // Auf einen Treffens-Vorschlag antworten (Annehmen / Ablehnen).
+  // Meeting-Proposals werden aktuell noch nicht aus dem Backend geladen —
+  // die Anbindung (PATCH /meeting-proposals/:id) folgt in einem späteren
+  // Schritt; bis dahin nur lokaler State-Update.
+  function beantworteProposal(nachrichtId: string, antwort: ProposalStatus) {
+    setNachrichten((prev) =>
+      prev.map((m) =>
+        m.id === nachrichtId && m.proposal
+          ? { ...m, proposal: { ...m.proposal, status: antwort } }
+          : m
+      )
     );
   }
 
@@ -344,31 +321,18 @@ export default function ChatDetailScreen() {
   async function senden() {
     const text = eingabe.trim();
     if (!text) return;
-
-    const jetzt = new Date();
-    const zeit = `${jetzt.getHours().toString().padStart(2, "0")}:${jetzt
-      .getMinutes()
-      .toString()
-      .padStart(2, "0")}`;
-
-    const neue: Message = {
-      id: `msg_${Date.now()}`,
-      text,
-      fromMe: true,
-      time: zeit,
-    };
-
-    const aktualisiert = [...nachrichten, neue];
-    setNachrichten(aktualisiert);
     setEingabe("");
-    await AsyncStorage.setItem(
-      STORAGE_PREFIX + id,
-      JSON.stringify(aktualisiert)
-    );
 
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 50);
+    try {
+      const neue = await sendeNachricht(id, text);
+      setNachrichten((prev) => [...prev, neue]);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+    } catch {
+      Alert.alert("Senden fehlgeschlagen", "Deine Nachricht konnte nicht gesendet werden.");
+      setEingabe(text);
+    }
   }
 
   return (
