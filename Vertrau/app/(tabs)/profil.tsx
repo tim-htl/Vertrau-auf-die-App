@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -49,6 +48,9 @@ import {
 } from "../../data/fragen";
 import { HOBBY_KATALOG, hobbyIcon } from "../../data/hobbies";
 import { alleModule, DEMO_STUDIENGANG } from "../../data/kurse";
+import { ladeMeinProfil, speichereMeinProfil } from "../../api/profil";
+import { authSync } from "../../api/me";
+import { ApiError } from "../../lib/api";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -60,7 +62,6 @@ const TAB_BAR_HOEHE_BASIS = 65;
 const TAB_BAR_ABSTAND_UNTEN_BASIS = 24;
 const TAB_BAR_EXTRA_ABSTAND = 20;
 
-const STORAGE_KEY = "profil_v2";
 
 const STATIC_BACKGROUND = require("../../assets/images/pack8.jpg");
 
@@ -747,19 +748,29 @@ export default function ProfilScreen() {
 
     async function profilLaden() {
       try {
-        const gespeichert = await AsyncStorage.getItem(STORAGE_KEY);
-        if (!istAktiv || !gespeichert) return;
+        // Profil aus dem Backend (GET /me). Bei 404 (eingeloggt, aber noch
+        // kein Profil-Record) wird es per authSync idempotent angelegt.
+        let roh: ProfilData;
+        try {
+          roh = await ladeMeinProfil();
+        } catch (e) {
+          if (e instanceof ApiError && e.statusCode === 404) {
+            await authSync();
+            roh = await ladeMeinProfil();
+          } else {
+            throw e;
+          }
+        }
+        if (!istAktiv) return;
 
-        const parsed = JSON.parse(gespeichert) as Partial<ProfilData>;
-        const geladen = normalisiereProfil(parsed);
-
+        const geladen = normalisiereProfil(roh);
         setProfil(geladen);
         setSheetProfil(geladen);
         editProfilRef.current = geladen;
       } catch {
         Alert.alert(
           "Profil konnte nicht geladen werden",
-          "Deine gespeicherten Profildaten konnten nicht gelesen werden."
+          "Der Server ist gerade nicht erreichbar. Bitte versuche es später erneut."
         );
       }
     }
@@ -780,10 +791,13 @@ export default function ProfilScreen() {
       const bereinigt = bereinigeProfil(editProfilRef.current);
 
       try {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(bereinigt));
-        editProfilRef.current = bereinigt;
-        setProfil(bereinigt);
-        setSheetProfil(bereinigt);
+        // Speichert Bio/Bilder/Hobbies/Fragen ins Backend (inkl. Foto-Upload);
+        // danach frisch laden → kanonischer Stand mit hochgeladenen Bild-URLs.
+        await speichereMeinProfil(bereinigt);
+        const aktuell = normalisiereProfil(await ladeMeinProfil());
+        editProfilRef.current = aktuell;
+        setProfil(aktuell);
+        setSheetProfil(aktuell);
       } catch {
         Alert.alert(
           "Speichern fehlgeschlagen",
@@ -815,10 +829,11 @@ export default function ProfilScreen() {
     const bereinigt = bereinigeProfil(sheetProfil);
 
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(bereinigt));
-      editProfilRef.current = bereinigt;
-      setProfil(bereinigt);
-      setSheetProfil(bereinigt);
+      await speichereMeinProfil(bereinigt);
+      const aktuell = normalisiereProfil(await ladeMeinProfil());
+      editProfilRef.current = aktuell;
+      setProfil(aktuell);
+      setSheetProfil(aktuell);
       sheetRef.current?.dismiss();
     } catch {
       Alert.alert(
