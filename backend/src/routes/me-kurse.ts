@@ -25,7 +25,9 @@ function notFound(message: string): Error {
 }
 
 export async function meKurseRoutes(app: FastifyInstance) {
-  // GET /me/kurse — alle belegten Module mit Bereichs-Pfad bis zur Uni.
+  // GET /me/kurse — alle belegten Module. Module hängen seit dem Moses-Import
+  // global an der Uni (kein einzelner Bereichs-Pfad mehr); welche Studiengänge
+  // ein Modul anbieten, liefert bei Bedarf GET /modul/:id.
   app.get("/me/kurse", async (req) => {
     const user = await app.requireAuth(req);
 
@@ -35,21 +37,6 @@ export async function meKurseRoutes(app: FastifyInstance) {
       include: {
         modul: {
           include: {
-            bereich: {
-              select: {
-                id: true,
-                name: true,
-                path: true,
-                studiengang: {
-                  select: {
-                    id: true,
-                    name: true,
-                    abschluss: true,
-                    universitaet: { select: { id: true, name: true, kuerzel: true } },
-                  },
-                },
-              },
-            },
             _count: { select: { belegtVon: true } },
           },
         },
@@ -60,10 +47,10 @@ export async function meKurseRoutes(app: FastifyInstance) {
       kurse: enrollments.map((e) => ({
         modulId: e.modulId,
         name: e.modul.name,
+        nummer: e.modul.nummer,
         ects: e.modul.ects,
         code: e.modul.code,
         semester: e.semester,
-        bereich: e.modul.bereich,
         anzahlTeilnehmer: e.modul._count.belegtVon,
       })),
     };

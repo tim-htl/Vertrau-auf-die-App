@@ -112,6 +112,7 @@ model Universitaet {
   emailDomains String[] @default([])
 
   studiengaenge Studiengang[]
+  module        Modul[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -129,6 +130,7 @@ model Studiengang {
 
   bereiche Bereich[]
   profile  Profile[]
+  module   StudiengangModul[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -151,7 +153,10 @@ model Bereich {
   parent   Bereich?  @relation("BereichTree", fields: [parentId], references: [id], onDelete: Cascade)
   kinder   Bereich[] @relation("BereichTree")
 
-  module Modul[]
+  // Module hängen seit dem Moses-Import nicht mehr am Bereich, sondern global
+  // an der Uni (Modul) und werden via studiengang_module M:N an Studiengänge
+  // geknüpft. Der Bereich-Baum bleibt als Curriculum-Gerüst (Pflicht/Wahl) für
+  // spätere Features erhalten, besitzt aber keine Module mehr.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -161,23 +166,47 @@ model Bereich {
   @@map("bereiche")
 }
 
+// Ein Modul existiert genau EINMAL pro Universität, eindeutig über die
+// Moses-Modulnummer (`nummer`). Dasselbe reale Modul wird von mehreren
+// Studiengängen angeboten (M:N über studiengang_module). So zeigen
+// user_module und aktivitaeten.modulId auf das GETEILTE Modul — Studierende
+// verschiedener Studiengänge landen im selben Modul (gemeinsame Lerngruppen).
 model Modul {
-  id   String  @id @default(uuid()) @db.Uuid
-  name String
-  ects Int?
-  code String?
+  id     String  @id @default(uuid()) @db.Uuid
+  name   String
+  nummer String // Moses-Modulnummer, z. B. "40022"
+  ects   Int?
+  code   String?
 
-  bereichId String  @db.Uuid
-  bereich   Bereich @relation(fields: [bereichId], references: [id], onDelete: Cascade)
+  uniId        String       @db.Uuid
+  universitaet Universitaet @relation(fields: [uniId], references: [id], onDelete: Cascade)
 
-  belegtVon   UserModul[]
-  lerngruppen Aktivitaet[]
+  studiengaenge StudiengangModul[]
+  belegtVon     UserModul[]
+  lerngruppen   Aktivitaet[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([bereichId, name])
+  @@unique([uniId, nummer])
   @@map("module")
+}
+
+// M:N-Verknüpfung Studiengang ↔ Modul. Jede Zeile bedeutet "dieser
+// Studiengang bietet dieses Modul an". Ein Modul kann zu vielen
+// Studiengängen gehören und umgekehrt.
+model StudiengangModul {
+  studiengangId String @db.Uuid
+  modulId       String @db.Uuid
+
+  studiengang Studiengang @relation(fields: [studiengangId], references: [id], onDelete: Cascade)
+  modul       Modul       @relation(fields: [modulId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([studiengangId, modulId])
+  @@index([modulId])
+  @@map("studiengang_module")
 }
 
 // Gruppentreffen UND Lerngruppe in einer Tabelle. Lerngruppe = Aktivitaet

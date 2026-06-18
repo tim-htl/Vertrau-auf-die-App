@@ -12,7 +12,6 @@ type BereichTreeNode = {
   name: string;
   path: string;
   kinder: BereichTreeNode[];
-  module: { id: string; name: string; ects: number | null; code: string | null }[];
 };
 
 // Häufig fehlerhaft beim ersten Tipp-Versuch: prüfe Pfad-Param-Format.
@@ -68,10 +67,10 @@ export async function katalogRoutes(app: FastifyInstance) {
     }
   );
 
-  // GET /studiengang/:id/moduldatenbank — kompletter rekursiver Bereich-
-  // Baum mit allen Modulen als Blätter. Eine Query lädt alle Bereiche +
-  // Module für den Studiengang, der Baum wird in-memory aufgebaut.
-  // Skaliert gut bis ein paar hundert Bereiche pro Studiengang.
+  // GET /studiengang/:id/moduldatenbank — alle Module des Studiengangs (flach,
+  // alphabetisch) plus den Bereich-Baum als Curriculum-Gerüst. Module hängen
+  // seit dem Moses-Import global an der Uni und sind via studiengang_module
+  // M:N verknüpft — daher die flache Modulliste statt Modul-Blätter im Baum.
   app.get<{ Params: { id: string } }>(
     "/studiengang/:id/moduldatenbank",
     async (req) => {
@@ -82,27 +81,22 @@ export async function katalogRoutes(app: FastifyInstance) {
       });
       if (!studiengang) throw notFound("Studiengang nicht gefunden.");
 
+      const module = await prisma.modul.findMany({
+        where: { studiengaenge: { some: { studiengangId: req.params.id } } },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, nummer: true, ects: true, code: true },
+      });
+
+      // Bereich-Baum (Pflicht/Wahl-Gerüst). Aktuell ohne Modul-Blätter; baut
+      // sich aus parentId in-memory auf. Skaliert gut bis ein paar hundert Bereiche.
       const bereiche = await prisma.bereich.findMany({
         where: { studiengangId: req.params.id },
         orderBy: { path: "asc" },
-        include: {
-          module: {
-            orderBy: { name: "asc" },
-            select: { id: true, name: true, ects: true, code: true },
-          },
-        },
       });
 
-      // Map<bereichId, TreeNode>; baue Eltern→Kind-Verbindungen über parentId.
       const byId = new Map<string, BereichTreeNode>();
       for (const b of bereiche) {
-        byId.set(b.id, {
-          id: b.id,
-          name: b.name,
-          path: b.path,
-          kinder: [],
-          module: b.module,
-        });
+        byId.set(b.id, { id: b.id, name: b.name, path: b.path, kinder: [] });
       }
 
       const roots: BereichTreeNode[] = [];
@@ -124,23 +118,22 @@ export async function katalogRoutes(app: FastifyInstance) {
           abschluss: studiengang.abschluss,
           universitaet: studiengang.universitaet,
         },
+        module,
         bereiche: roots,
       };
     }
   );
 
-  // GET /modul/:id — Detail mit ECTS, Code, Bereichs-Pfad, Teilnehmerliste
-  // (für die Frontend-Anzeige „wer belegt diesen Kurs auch").
+  // GET /modul/:id — Detail mit ECTS, Code, den anbietenden Studiengängen und
+  // der Teilnehmerliste (für die Frontend-Anzeige „wer belegt diesen Kurs auch").
+  // Ein Modul kann zu mehreren Studiengängen gehören (M:N), daher `studiengaenge`.
   app.get<{ Params: { id: string } }>("/modul/:id", async (req) => {
     ensureUuid(req.params.id, "modul id");
     const modul = await prisma.modul.findUnique({
       where: { id: req.params.id },
       include: {
-        bereich: {
-          select: {
-            id: true,
-            name: true,
-            path: true,
+        studiengaenge: {
+          include: {
             studiengang: {
               select: {
                 id: true,
@@ -169,9 +162,10 @@ export async function katalogRoutes(app: FastifyInstance) {
       modul: {
         id: modul.id,
         name: modul.name,
+        nummer: modul.nummer,
         ects: modul.ects,
         code: modul.code,
-        bereich: modul.bereich,
+        studiengaenge: modul.studiengaenge.map((sm) => sm.studiengang),
         anzahlTeilnehmer: modul._count.belegtVon,
         teilnehmer: modul.belegtVon.map((eintrag) => ({
           id: eintrag.profile.id,

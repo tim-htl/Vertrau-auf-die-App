@@ -157,15 +157,18 @@ echo "  → Studiengang: $STUDIENGANG_ID"
 api_test "GET /unis/:id/studiengaenge" 200 GET "/unis/$UNI_ID/studiengaenge" "" ""
 api_test "GET /studiengang/:id/moduldatenbank" 200 GET "/studiengang/$STUDIENGANG_ID/moduldatenbank" "" ""
 
-# Erstes Modul aus dem Baum holen — auch hier nicht naiv bereiche.0.module.0,
-# weil ein Bereich nur Kinder ohne eigene Module haben kann.
+# Erstes Modul holen. Seit dem Moses-Import hängen Module flach am Studiengang
+# (M:N, top-level "module"); der Bereich-Baum bleibt als Gerüst ohne Module.
+# Fallback auf den alten Baum, falls dort doch Modul-Blätter stecken.
 MODUL_ID=$(curl -s "$API/studiengang/$STUDIENGANG_ID/moduldatenbank" | python3 -c "import json,sys
 def walk(node):
   for m in node.get('module', []): yield m['id']
   for k in node.get('kinder', []):
     yield from walk(k)
 d = json.load(sys.stdin)
-for b in d['bereiche']:
+for m in d.get('module', []):
+  print(m['id']); sys.exit(0)
+for b in d.get('bereiche', []):
   for mid in walk(b):
     print(mid); sys.exit(0)")
 echo "  → erstes Modul: $MODUL_ID"

@@ -5,47 +5,33 @@
 // mirrors the demo data in `Vertrau/data/kurse.ts`. Real catalog data
 // gets entered via the admin UI in Phase 7.
 
+import { readFileSync } from "node:fs";
+
 import { Abschluss, PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-type BereichSeed = {
-  slug: string;
-  name: string;
-  module?: { name: string; ects?: number; code?: string }[];
-  kinder?: BereichSeed[];
+// Aus dem Moses-Modulverzeichnis der TU Berlin gescrapter Katalog (siehe
+// prisma/moses-modules.json). Module sind global über die Moses-Modulnummer
+// dedupliziert; programs[mosesId].moduleNrs verweist nur darauf.
+type MosesData = {
+  programCount: number;
+  moduleCount: number;
+  programs: Record<
+    string,
+    { name: string; abschluss: "BSc" | "MSc"; moduleNrs: string[] }
+  >;
+  modules: Record<string, string>;
 };
 
-async function seedStudiengangTree(
-  studiengangId: string,
-  bereiche: BereichSeed[],
-  parentId: string | null = null,
-  parentPath = ""
-): Promise<void> {
-  for (const node of bereiche) {
-    const path = parentPath ? `${parentPath}/${node.slug}` : node.slug;
+const mosesData = JSON.parse(
+  readFileSync(new URL("./moses-modules.json", import.meta.url), "utf8")
+) as MosesData;
 
-    const bereich = await prisma.bereich.upsert({
-      where: { studiengangId_path: { studiengangId, path } },
-      update: { name: node.name, parentId },
-      create: { name: node.name, path, studiengangId, parentId },
-    });
-
-    if (node.module) {
-      for (const m of node.module) {
-        await prisma.modul.upsert({
-          where: { bereichId_name: { bereichId: bereich.id, name: m.name } },
-          update: { ects: m.ects, code: m.code },
-          create: { name: m.name, ects: m.ects, code: m.code, bereichId: bereich.id },
-        });
-      }
-    }
-
-    if (node.kinder?.length) {
-      await seedStudiengangTree(studiengangId, node.kinder, bereich.id, path);
-    }
-  }
-}
+const abschlussMap: Record<string, Abschluss> = {
+  BSc: Abschluss.BACHELOR,
+  MSc: Abschluss.MASTER,
+};
 
 async function main() {
   // ── Universitäten ─────────────────────────────────────────────────────────
@@ -69,119 +55,62 @@ async function main() {
     },
   });
 
-  // ── Studiengang: Wirtschaftsingenieurwesen B.Sc. @ TU Berlin ──────────────
-  const wingBsc = await prisma.studiengang.upsert({
-    where: {
-      uniId_name_abschluss: {
-        uniId: tuBerlin.id,
-        name: "Wirtschaftsingenieurwesen",
-        abschluss: Abschluss.BACHELOR,
+  // ── Katalog: Studiengänge + Module aus Moses (TU Berlin) ──────────────────
+  // 21 Studiengänge, 1.946 global eindeutige Module (per Moses-Nummer), via
+  // studiengang_module M:N verknüpft. Idempotent: Studiengänge per upsert,
+  // Module + Verknüpfungen per createMany({ skipDuplicates }).
+
+  const studiengangIdByMoses = new Map<string, string>();
+  for (const [mosesId, prog] of Object.entries(mosesData.programs)) {
+    const abschluss = abschlussMap[prog.abschluss];
+    if (!abschluss) {
+      throw new Error(`Unbekannter Abschluss "${prog.abschluss}" (Moses ${mosesId})`);
+    }
+    const sg = await prisma.studiengang.upsert({
+      where: {
+        uniId_name_abschluss: { uniId: tuBerlin.id, name: prog.name, abschluss },
       },
-    },
-    update: {},
-    create: {
+      update: {},
+      create: { uniId: tuBerlin.id, name: prog.name, abschluss },
+    });
+    studiengangIdByMoses.set(mosesId, sg.id);
+  }
+
+  // Module global anlegen (ein Modul je Moses-Nummer). code = nummer, damit die
+  // bestehenden Endpoints, die `code` zurückgeben, weiter etwas Sinnvolles zeigen.
+  await prisma.modul.createMany({
+    data: Object.entries(mosesData.modules).map(([nummer, name]) => ({
       uniId: tuBerlin.id,
-      name: "Wirtschaftsingenieurwesen",
-      abschluss: Abschluss.BACHELOR,
-    },
+      nummer,
+      name,
+      code: nummer,
+    })),
+    skipDuplicates: true,
   });
 
-  await seedStudiengangTree(wingBsc.id, [
-    {
-      slug: "integrationsbereich",
-      name: "Integrationsbereich",
-      module: [
-        { name: "Technisches Projekt", ects: 9 },
-        { name: "Wirtschaftswissenschaftliches Projekt", ects: 9 },
-        { name: "Integrationsseminar", ects: 6 },
-      ],
-    },
-    {
-      slug: "wiwi",
-      name: "Wirtschaftswissenschaften",
-      kinder: [
-        {
-          slug: "bwl",
-          name: "BWL",
-          module: [
-            { name: "Marketing", ects: 6 },
-            { name: "Unternehmensführung", ects: 6 },
-            { name: "Controlling", ects: 6 },
-            { name: "Investition & Finanzierung", ects: 6 },
-          ],
-        },
-        {
-          slug: "vwl",
-          name: "VWL",
-          module: [
-            { name: "Makroökonomie", ects: 6 },
-            { name: "Mikroökonomie II", ects: 6 },
-            { name: "Wirtschaftspolitik", ects: 6 },
-          ],
-        },
-        {
-          slug: "recht",
-          name: "Recht",
-          module: [
-            { name: "Bürgerliches Recht", ects: 6 },
-            { name: "Handelsrecht", ects: 6 },
-            { name: "Arbeitsrecht", ects: 6 },
-          ],
-        },
-      ],
-    },
-    {
-      slug: "vertiefung",
-      name: "Vertiefungsrichtung",
-      kinder: [
-        {
-          slug: "logistik",
-          name: "Logistik",
-          module: [
-            { name: "Supply Chain Management", ects: 6 },
-            { name: "Transportsysteme", ects: 6 },
-            { name: "Lagerhaltung", ects: 6 },
-          ],
-        },
-        {
-          slug: "produktion",
-          name: "Produktionstechnik",
-          module: [
-            { name: "Fabrikbetrieb", ects: 6 },
-            { name: "Fertigungstechnik", ects: 6 },
-            { name: "Industrie 4.0", ects: 6 },
-          ],
-        },
-        {
-          slug: "energie",
-          name: "Energie- und Ressourcenmanagement",
-          module: [
-            { name: "Nachhaltige Energiesysteme", ects: 6 },
-            { name: "Ressourceneffizienz", ects: 6 },
-          ],
-        },
-      ],
-    },
-  ]);
-
-  // ── Studiengang: Wirtschaftsingenieurwesen M.Sc. @ TU Berlin (Stub) ───────
-  // Separater Eintrag laut Entscheidung in Sub-Phase 1b — Bereiche/Module
-  // folgen, sobald echte Daten vorliegen.
-  await prisma.studiengang.upsert({
-    where: {
-      uniId_name_abschluss: {
-        uniId: tuBerlin.id,
-        name: "Wirtschaftsingenieurwesen",
-        abschluss: Abschluss.MASTER,
-      },
-    },
-    update: {},
-    create: {
-      uniId: tuBerlin.id,
-      name: "Wirtschaftsingenieurwesen",
-      abschluss: Abschluss.MASTER,
-    },
+  const modulRows = await prisma.modul.findMany({
+    where: { uniId: tuBerlin.id },
+    select: { id: true, nummer: true },
   });
+  const modulIdByNummer = new Map(modulRows.map((m) => [m.nummer, m.id]));
+
+  // M:N-Verknüpfungen Studiengang ↔ Modul aufbauen.
+  const links: { studiengangId: string; modulId: string }[] = [];
+  for (const [mosesId, prog] of Object.entries(mosesData.programs)) {
+    const studiengangId = studiengangIdByMoses.get(mosesId)!;
+    for (const nummer of prog.moduleNrs) {
+      const modulId = modulIdByNummer.get(nummer);
+      if (modulId) links.push({ studiengangId, modulId });
+    }
+  }
+
+  const LINK_CHUNK = 1000;
+  for (let i = 0; i < links.length; i += LINK_CHUNK) {
+    await prisma.studiengangModul.createMany({
+      data: links.slice(i, i + LINK_CHUNK),
+      skipDuplicates: true,
+    });
+  }
 
   // ── Profil-Fragen-Katalog ──────────────────────────────────────────────────
   // Finale Liste vom 2026-06-12. sortierung in 10er-Schritten, damit später
@@ -363,10 +292,12 @@ async function main() {
   }
 
   console.log(`Seed done.`);
-  console.log(`  Universitäten: 2 (${tuBerlin.kuerzel}, ${lmu.kuerzel})`);
-  console.log(`  Studiengänge:  2 (Wirtschaftsing. B.Sc. + M.Sc. @ TUB)`);
-  console.log(`  Profil-Fragen: ${profilFragen.length}`);
-  console.log(`  Hobbies:       ${hobbies.length}`);
+  console.log(`  Universitäten:  2 (${tuBerlin.kuerzel}, ${lmu.kuerzel})`);
+  console.log(`  Studiengänge:   ${studiengangIdByMoses.size} (TU Berlin, aus Moses)`);
+  console.log(`  Module:         ${modulRows.length}`);
+  console.log(`  Verknüpfungen:  ${links.length} (studiengang_module)`);
+  console.log(`  Profil-Fragen:  ${profilFragen.length}`);
+  console.log(`  Hobbies:        ${hobbies.length}`);
 }
 
 main()
