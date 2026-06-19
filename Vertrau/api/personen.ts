@@ -20,6 +20,7 @@ function mapPerson(p: ApiPerson): UIPerson {
     kurzbeschreibung: p.kurzbeschreibung ?? "",
     hobbies: p.hobbies.map((h) => h.name),
     module: p.module.map((m) => m.name),
+    moduleItems: p.module.map((m) => ({ id: m.id, name: m.name })),
     uni: p.uni?.name ?? "",
     studiengang: p.studiengang?.name ?? "",
     frageAntworten: p.frageAntworten.map((fa) => ({

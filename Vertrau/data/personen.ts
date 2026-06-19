@@ -10,6 +10,9 @@ export type Person = {
   kurzbeschreibung: string;
   hobbies: string[];
   module: string[];
+  // Optional: Module mit id (für klickbare Kurse → Teilnehmer-Übersicht).
+  // Setzt der Backend-Mapper; die Mock-Daten lassen es weg.
+  moduleItems?: { id: string; name: string }[];
   uni: string;
   studiengang: string;
   // Antworten auf Profil-Fragen (max. 5, Reihenfolge = Anzeige-Reihenfolge).

@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { ProfilAusfuehrlich } from "../../components/ProfilAusfuehrlich";
@@ -11,6 +11,7 @@ import type { Person } from "../../data/personen";
 
 export default function PersonDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const [person, setPerson] = useState<Person | null>(null);
   const [status, setStatus] = useState<"laedt" | "ok" | "fehler">("laedt");
 
@@ -45,7 +46,11 @@ export default function PersonDetailScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: person.name }} />
-      <ProfilAusfuehrlich profil={person} />
+      <ProfilAusfuehrlich
+        profil={person}
+        moduleItems={person.moduleItems}
+        onModulPress={(modulId) => router.push(`/kurs/${modulId}`)}
+      />
     </View>
   );
 }

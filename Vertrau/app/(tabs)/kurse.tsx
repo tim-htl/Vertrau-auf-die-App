@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { type ReactNode, useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import {
   Image,
   ImageBackground,
@@ -15,7 +15,15 @@ import {
   ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { DEMO_STUDIENGANG } from "../../data/kurse";
+import {
+  belegeModul,
+  entferneModul,
+  ladeMeineKurse,
+  ladeStudiengangModule,
+  type UIKatalogModul,
+  type UIMeinKurs,
+} from "../../api/kurse";
+import { getMe } from "../../api/me";
 
 const CARD_BG = "#f8f8f6";
 const BLACK = "#050505";
@@ -23,30 +31,6 @@ const ACCENT = "#ff6b5f";
 
 const STATIC_BACKGROUND = require("../../assets/images/grad1.jpg");
 const SCREEN_BG = "#FFFFFF";
-
-type Teilnehmer = {
-  id: string;
-  bild?: string | null;
-};
-
-type KursItem = {
-  id: string;
-  name: string;
-  ects?: number | string | null;
-  teilnehmer?: Teilnehmer[];
-};
-
-type ModulItem = {
-  id?: string;
-  name?: string | null;
-};
-
-type ModulBereichItem = {
-  id: string;
-  name: string;
-  module?: ModulItem[];
-  bereiche?: ModulBereichItem[];
-};
 
 // ─── App Hintergrund ─────────────────────────────────────────────────────────
 
@@ -74,52 +58,16 @@ function AppHintergrund({
 function UniLogo() {
   return (
     <View style={[styles.uniLogo, styles.uniLogoPlatzhalter]}>
-      <Image 
-        source={require("../../assets/images/TUB.png")} 
-        style={styles.tuLogoImage} 
+      <Image
+        source={require("../../assets/images/TUB.png")}
+        style={styles.tuLogoImage}
         resizeMode="contain"
       />
     </View>
   );
 }
 
-function MiniAvatar({ bild }: { bild?: string | null }) {
-  return (
-    <View style={styles.avatarBubble}>
-      {bild ? (
-        <Image source={{ uri: bild }} style={styles.avatarImage} />
-      ) : (
-        <Ionicons name="person" size={17} color="#111" />
-      )}
-    </View>
-  );
-}
-
-function TeilnehmerAvatare({ teilnehmer }: { teilnehmer?: Teilnehmer[] }) {
-  if (!teilnehmer || teilnehmer.length === 0) {
-    return null;
-  }
-
-  return (
-    <View style={styles.avatarRow}>
-      {teilnehmer.slice(0, 4).map((t) => (
-        <MiniAvatar key={t.id} bild={t.bild} />
-      ))}
-
-      {teilnehmer.length > 4 && (
-        <View style={styles.moreAvatars}>
-          <Text style={styles.moreAvatarsText}>+{teilnehmer.length - 4}</Text>
-        </View>
-      )}
-    </View>
-  );
-}
-
-function StudiengangKarte({
-  name,
-}: {
-  name: string;
-}) {
+function StudiengangKarte({ name }: { name: string }) {
   const { width } = useWindowDimensions();
   const cardWidth = width - 36;
 
@@ -132,20 +80,18 @@ function StudiengangKarte({
           imageStyle={styles.headerHeroImage}
         >
           <View style={styles.heroOverlay} />
-
-
         </ImageBackground>
 
         {/* Floating Logo - Tweak coordinates in styles.floatingLogo */}
         <View style={styles.floatingLogo}>
-           <UniLogo />
+          <UniLogo />
         </View>
 
         <View style={styles.content}>
-          <Text 
-            style={styles.title} 
-            numberOfLines={1} 
-            adjustsFontSizeToFit 
+          <Text
+            style={styles.title}
+            numberOfLines={1}
+            adjustsFontSizeToFit
             minimumFontScale={0.5}
           >
             {name}
@@ -199,18 +145,22 @@ function SammelKarte({
   );
 }
 
+// Listeneintrag für ein Modul. Standard: ganze Zeile öffnet die Teilnehmer-
+// Übersicht. Optional rechts ein Belegen/Abwählen-Knopf (Moduldatenbank).
 function KompakterEintrag({
   titel,
   beschreibung,
   icon,
-  teilnehmer,
   onPress,
+  belegt,
+  onToggleBelegt,
 }: {
   titel: string;
   beschreibung: string;
   icon: keyof typeof Ionicons.glyphMap;
-  teilnehmer?: Teilnehmer[];
   onPress: () => void;
+  belegt?: boolean;
+  onToggleBelegt?: () => void;
 }) {
   return (
     <Pressable
@@ -234,14 +184,22 @@ function KompakterEintrag({
           </Text>
         </View>
 
-        <Ionicons name="chevron-forward" size={22} color="#A0C3D2" />
+        {onToggleBelegt ? (
+          <Pressable
+            onPress={onToggleBelegt}
+            hitSlop={10}
+            style={[styles.aktionButton, belegt ? styles.aktionButtonBelegt : null]}
+          >
+            <Ionicons
+              name={belegt ? "checkmark" : "add"}
+              size={20}
+              color={belegt ? "#fff" : ACCENT}
+            />
+          </Pressable>
+        ) : (
+          <Ionicons name="chevron-forward" size={22} color="#A0C3D2" />
+        )}
       </View>
-
-      {teilnehmer && teilnehmer.length > 0 && (
-        <View style={styles.compactFooter}>
-          <TeilnehmerAvatare teilnehmer={teilnehmer} />
-        </View>
-      )}
     </Pressable>
   );
 }
@@ -278,56 +236,83 @@ function SuchLeiste({
   );
 }
 
-function getBereichBeschreibung(bereich: ModulBereichItem) {
-  if (bereich.bereiche && bereich.bereiche.length > 0) {
-    return `${bereich.bereiche.length} Bereiche entdecken`;
-  }
-
-  if (bereich.module && bereich.module.length > 0) {
-    return `${bereich.module.length} Module entdecken`;
-  }
-
-  return "Module entdecken";
-}
-
-function getSuchtextFuerBereich(bereich: ModulBereichItem): string {
-  const eigeneModule = bereich.module?.map((modul) => modul.name ?? "") ?? [];
-
-  const unterbereiche =
-    bereich.bereiche?.flatMap((unterbereich) => [
-      unterbereich.name,
-      ...(unterbereich.module?.map((modul) => modul.name ?? "") ?? []),
-    ]) ?? [];
-
-  return [bereich.name, ...eigeneModule, ...unterbereiche]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
 export default function KurseScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const studiengang = DEMO_STUDIENGANG;
 
-  const meineKurse = studiengang.meineKurse as KursItem[];
-  const moduldatenbank = studiengang.moduldatenbank as ModulBereichItem[];
-
+  const [studiengangName, setStudiengangName] = useState<string | null>(null);
+  const [studiengangId, setStudiengangId] = useState<string | null>(null);
+  const [meineKurse, setMeineKurse] = useState<UIMeinKurs[]>([]);
+  const [katalog, setKatalog] = useState<UIKatalogModul[]>([]);
+  const [laden, setLaden] = useState(true);
   const [suche, setSuche] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const gefilterteModuldatenbank = useMemo(() => {
+  const belegteIds = useMemo(
+    () => new Set(meineKurse.map((k) => k.id)),
+    [meineKurse]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let weg = false;
+      (async () => {
+        setLaden(true);
+        try {
+          const me = await getMe();
+          if (weg) return;
+          setStudiengangName(me.studiengang?.name ?? null);
+          setStudiengangId(me.studiengangId);
+          const [meine, kat] = await Promise.all([
+            ladeMeineKurse(),
+            me.studiengangId
+              ? ladeStudiengangModule(me.studiengangId)
+              : Promise.resolve<UIKatalogModul[]>([]),
+          ]);
+          if (weg) return;
+          setMeineKurse(meine);
+          setKatalog(kat);
+        } catch {
+          // Leerer Zustand bleibt stehen; Fehler wird hier still geschluckt.
+        } finally {
+          if (!weg) setLaden(false);
+        }
+      })();
+      return () => {
+        weg = true;
+      };
+    }, [])
+  );
+
+  const gefilterterKatalog = useMemo(() => {
     const query = suche.trim().toLowerCase();
-
-    if (!query) {
-      return moduldatenbank;
-    }
-
-    return moduldatenbank.filter((bereich) =>
-      getSuchtextFuerBereich(bereich).includes(query)
+    if (!query) return katalog;
+    return katalog.filter(
+      (m) =>
+        m.name.toLowerCase().includes(query) || m.nummer.includes(query)
     );
-  }, [moduldatenbank, suche]);
+  }, [katalog, suche]);
 
   const sucheIstAktiv = suche.trim().length > 0;
+
+  async function toggleBelegt(modulId: string) {
+    if (busyId) return;
+    const istBelegt = belegteIds.has(modulId);
+    setBusyId(modulId);
+    try {
+      if (istBelegt) {
+        await entferneModul(modulId);
+      } else {
+        await belegeModul(modulId);
+      }
+      const meine = await ladeMeineKurse();
+      setMeineKurse(meine);
+    } catch {
+      // optional: Fehlerhinweis; vorerst still
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <AppHintergrund>
@@ -339,25 +324,30 @@ export default function KurseScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <StudiengangKarte
-          name={studiengang.name}
-        />
+        <StudiengangKarte name={studiengangName ?? "Mein Studiengang"} />
 
         <SammelKarte
           titel="Meine Module"
-          beschreibung={`${meineKurse.length} Module in deinem Studiengang`}
+          beschreibung={
+            laden && meineKurse.length === 0
+              ? "Wird geladen…"
+              : `${meineKurse.length} belegte Module`
+          }
           icon="book"
         >
           {meineKurse.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>Noch keine Module vorhanden.</Text>
+              <Text style={styles.emptyText}>
+                {laden
+                  ? "Lädt…"
+                  : "Noch keine Module belegt. Füge welche unten in der Moduldatenbank oder über „Profil bearbeiten“ hinzu."}
+              </Text>
             </View>
           ) : (
             meineKurse.map((kurs) => {
-              const teilnehmerText = kurs.teilnehmer?.length
-                ? ` · ${kurs.teilnehmer.length} Teilnehmer`
+              const teilnehmerText = kurs.anzahlTeilnehmer
+                ? ` · ${kurs.anzahlTeilnehmer} Teilnehmer`
                 : "";
-
               return (
                 <KompakterEintrag
                   key={kurs.id}
@@ -368,7 +358,6 @@ export default function KurseScreen() {
                       : `Modul öffnen${teilnehmerText}`
                   }
                   icon="book"
-                  teilnehmer={kurs.teilnehmer}
                   onPress={() => router.push(`/kurs/${kurs.id}`)}
                 />
               );
@@ -380,8 +369,8 @@ export default function KurseScreen() {
           titel="Moduldatenbank"
           beschreibung={
             sucheIstAktiv
-              ? `${gefilterteModuldatenbank.length} von ${moduldatenbank.length} Treffern`
-              : `${moduldatenbank.length} Modulbereiche durchsuchen`
+              ? `${gefilterterKatalog.length} von ${katalog.length} Treffern`
+              : `${katalog.length} Module in deinem Studiengang`
           }
           icon="albums"
         >
@@ -391,20 +380,26 @@ export default function KurseScreen() {
             onClear={() => setSuche("")}
           />
 
-          {gefilterteModuldatenbank.length === 0 ? (
+          {gefilterterKatalog.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>
-                Keine passenden Module gefunden.
+                {laden ? "Lädt…" : "Keine passenden Module gefunden."}
               </Text>
             </View>
           ) : (
-            gefilterteModuldatenbank.map((bereich) => (
+            gefilterterKatalog.map((modul) => (
               <KompakterEintrag
-                key={bereich.id}
-                titel={bereich.name}
-                beschreibung={getBereichBeschreibung(bereich)}
+                key={modul.id}
+                titel={modul.name}
+                beschreibung={
+                  modul.ects != null
+                    ? `Nr. ${modul.nummer} · ${modul.ects} ECTS`
+                    : `Nr. ${modul.nummer}`
+                }
                 icon="albums"
-                onPress={() => router.push(`/bereich/${bereich.id}`)}
+                onPress={() => router.push(`/kurs/${modul.id}`)}
+                belegt={belegteIds.has(modul.id)}
+                onToggleBelegt={() => toggleBelegt(modul.id)}
               />
             ))
           )}
@@ -449,7 +444,7 @@ const styles = StyleSheet.create({
   },
 
   headerCard: {
-    minHeight: 280, 
+    minHeight: 280,
   },
 
   headerHero: {
@@ -470,31 +465,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.25)",
   },
 
-  topBar: {
-    position: "absolute",
-    top: 24,
-    left: 24,
-    right: 24,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  logo: {
-    color: "#fff",
-    fontSize: 2,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-  },
-
   // NEW: Absolute positioning for the logo
   floatingLogo: {
     position: "absolute",
-    top: 10, // Adjust this so it overlaps perfectly with the image and content
-     // Change to 'left: 24' if you want it on the left side
+    top: 10,
     right: 20,
     zIndex: 10,
-    elevation: 13, // Ensure it sits higher than the card shadow
+    elevation: 13,
   },
 
   uniLogo: {
@@ -504,7 +481,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderWidth: 2,
     borderColor: CARD_BG,
-    overflow: "hidden", 
+    overflow: "hidden",
   },
 
   uniLogoPlatzhalter: {
@@ -648,9 +625,20 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  compactFooter: {
-    marginTop: 12,
-    paddingLeft: 56,
+  aktionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    borderColor: ACCENT,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  aktionButtonBelegt: {
+    backgroundColor: ACCENT,
+    borderColor: ACCENT,
   },
 
   searchContainer: {
@@ -689,47 +677,5 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: "600",
     textAlign: "center",
-  },
-
-  avatarRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  avatarBubble: {
-    width: 38,
-    height: 38,
-    borderRadius: 21,
-    backgroundColor: "#fff",
-    borderWidth: 2,
-    borderColor: CARD_BG,
-    marginRight: -10,
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-
-  avatarImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 21,
-  },
-
-  moreAvatars: {
-    width: 38,
-    height: 38,
-    borderRadius: 21,
-    backgroundColor: "#111",
-    borderWidth: 2,
-    borderColor: CARD_BG,
-    marginLeft: 2,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  moreAvatarsText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "800",
   },
 });

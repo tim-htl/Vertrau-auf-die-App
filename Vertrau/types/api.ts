@@ -85,16 +85,18 @@ export type Studiengang = {
 export type ModulShort = {
   id: UUID;
   name: string;
+  nummer: string;
   ects: number | null;
   code: string | null;
 };
 
+// Bereich-Baum ist seit dem Moses-Import nur noch Curriculum-Gerüst
+// (Pflicht/Wahl) ohne Modul-Blätter — die Module hängen flach am Studiengang.
 export type Bereich = {
   id: UUID;
   name: string;
   path: string;
   kinder: Bereich[];
-  module: ModulShort[];
 };
 
 export type ModulTeilnehmer = {
@@ -104,22 +106,21 @@ export type ModulTeilnehmer = {
   semester: number | null;
 };
 
+// Ein Modul kann zu mehreren Studiengängen gehören (M:N) → studiengaenge[].
+export type ModulStudiengang = {
+  id: UUID;
+  name: string;
+  abschluss: Abschluss;
+  universitaet: { id: UUID; name: string; kuerzel: string };
+};
+
 export type ModulDetail = {
   id: UUID;
   name: string;
+  nummer: string;
   ects: number | null;
   code: string | null;
-  bereich: {
-    id: UUID;
-    name: string;
-    path: string;
-    studiengang: {
-      id: UUID;
-      name: string;
-      abschluss: Abschluss;
-      universitaet: { id: UUID; name: string; kuerzel: string };
-    };
-  };
+  studiengaenge: ModulStudiengang[];
   anzahlTeilnehmer: number;
   teilnehmer: ModulTeilnehmer[];
 };
@@ -133,6 +134,9 @@ export type GetModuldatenbankResponse = {
     abschluss: Abschluss;
     universitaet: { id: UUID; name: string; kuerzel: string };
   };
+  // Flache Modulliste des Studiengangs (via studiengang_module M:N).
+  module: ModulShort[];
+  // Curriculum-Gerüst (aktuell ohne Module).
   bereiche: Bereich[];
 };
 export type GetModulResponse = { modul: ModulDetail };
@@ -164,10 +168,10 @@ export type GetPersonResponse = { person: Person };
 export type MeinKurs = {
   modulId: UUID;
   name: string;
+  nummer: string;
   ects: number | null;
   code: string | null;
   semester: number | null;
-  bereich: ModulDetail["bereich"];
   anzahlTeilnehmer: number;
 };
 
