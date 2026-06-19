@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Linking,
   NativeScrollEvent,
@@ -17,15 +18,10 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  DEMO_AKTIVITAETEN,
-  type Aktivitaet,
-  type Teilnehmer,
-} from "../../data/aktivitaeten";
+import { type Aktivitaet, type Teilnehmer } from "../../data/aktivitaeten";
 import { type Message, type ProposalStatus } from "../../data/chats";
 import { istBeigetreten, joinAktivitaet } from "../../data/joined";
-import { ladeUserAktivitaeten } from "../../data/userAktivitaeten";
-import { ladeUserLerngruppen } from "../../data/userLerngruppen";
+import { ladeAktivitaet } from "../../api/aktivitaeten";
 
 const STORAGE_PREFIX = "messages_v4_";
 
@@ -176,33 +172,27 @@ export default function AktivitaetDetailScreen() {
 
   const modus: Modus = modusParam ?? "teilnehmen";
 
-  const [aktivitaet, setAktivitaet] = useState<Aktivitaet | undefined>(() =>
-    DEMO_AKTIVITAETEN.find((a) => a.id === id)
-  );
+  const [aktivitaet, setAktivitaet] = useState<Aktivitaet | undefined>(undefined);
+  const [laden, setLaden] = useState(true);
   const [teilnehmerOffen, setTeilnehmerOffen] = useState(false);
   const [beigetreten, setBeigetreten] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     let abgebrochen = false;
+    setLaden(true);
     (async () => {
+      try {
+        const a = await ladeAktivitaet(id);
+        if (!abgebrochen) setAktivitaet(a);
+      } catch {
+        if (!abgebrochen) setAktivitaet(undefined);
+      } finally {
+        if (!abgebrochen) setLaden(false);
+      }
+      // Beitritts-Status (noch Mock; echte Anbindung folgt in Etappe B).
       const drin = await istBeigetreten(id);
       if (!abgebrochen) setBeigetreten(drin);
-
-      // User-Aktivitäten nachladen, falls nicht in DEMO
-      if (!DEMO_AKTIVITAETEN.find((a) => a.id === id)) {
-        const user = await ladeUserAktivitaeten();
-        const gefunden = user.find((a) => a.id === id);
-        if (!abgebrochen && gefunden) {
-          setAktivitaet(gefunden);
-        } else {
-          const lerngruppen = await ladeUserLerngruppen();
-          const gefundeneGruppe = lerngruppen.find((g) => g.id === id);
-          if (!abgebrochen && gefundeneGruppe) {
-            setAktivitaet(gefundeneGruppe as unknown as Aktivitaet);
-          }
-        }
-      }
     })();
     return () => {
       abgebrochen = true;
@@ -213,7 +203,11 @@ export default function AktivitaetDetailScreen() {
     return (
       <View style={styles.container}>
         <Stack.Screen options={{ title: "Aktivität" }} />
-        <Text style={styles.leerText}>Aktivität nicht gefunden.</Text>
+        {laden ? (
+          <ActivityIndicator style={{ marginTop: 40 }} color="#007AFF" />
+        ) : (
+          <Text style={styles.leerText}>Aktivität nicht gefunden.</Text>
+        )}
       </View>
     );
   }
@@ -353,10 +347,21 @@ export default function AktivitaetDetailScreen() {
         {teilnehmerOffen && (
           <View style={styles.teilnehmerListe}>
             {aktivitaet.teilnehmer.map((t) => (
-              <View key={t.id} style={styles.teilnehmerZeile}>
+              <TouchableOpacity
+                key={t.id}
+                style={styles.teilnehmerZeile}
+                onPress={() => router.push(`/person/${t.id}`)}
+                activeOpacity={0.7}
+              >
                 <ProfilAvatar teil={t} size={44} />
                 <Text style={styles.teilnehmerName}>{t.name}</Text>
-              </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color="#c7c7cc"
+                  style={{ marginLeft: "auto" }}
+                />
+              </TouchableOpacity>
             ))}
             {aktivitaet.teilnehmer.length === 0 && (
               <Text style={styles.teilnehmerLeer}>Noch keine Teilnehmer.</Text>

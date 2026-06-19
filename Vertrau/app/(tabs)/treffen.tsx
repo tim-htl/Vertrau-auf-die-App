@@ -12,8 +12,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { DEMO_AKTIVITAETEN, type Aktivitaet } from "../../data/aktivitaeten";
-import { ladeUserAktivitaeten } from "../../data/userAktivitaeten";
+import { type Aktivitaet } from "../../data/aktivitaeten";
+import { ladeAktivitaeten } from "../../api/aktivitaeten";
 
 const STATIC_BACKGROUND = require("../../assets/images/grad1.jpg");
 const SCREEN_BG = "#FFFFFF";
@@ -147,21 +147,23 @@ export default function TreffenScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const [userAktivitaeten, setUserAktivitaeten] = useState<Aktivitaet[]>([]);
+  const [aktivitaeten, setAktivitaeten] = useState<Aktivitaet[]>([]);
+  const [laden, setLaden] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       let abgebrochen = false;
-
-      async function laden() {
-        const liste = await ladeUserAktivitaeten();
-
-        if (!abgebrochen) {
-          setUserAktivitaeten(liste);
+      (async () => {
+        setLaden(true);
+        try {
+          const liste = await ladeAktivitaeten();
+          if (!abgebrochen) setAktivitaeten(liste);
+        } catch {
+          if (!abgebrochen) setAktivitaeten([]);
+        } finally {
+          if (!abgebrochen) setLaden(false);
         }
-      }
-
-      laden();
+      })();
 
       return () => {
         abgebrochen = true;
@@ -169,10 +171,7 @@ export default function TreffenScreen() {
     }, [])
   );
 
-  const alleAktivitaeten: Aktivitaet[] = [
-    ...userAktivitaeten,
-    ...DEMO_AKTIVITAETEN,
-  ];
+  const alleAktivitaeten: Aktivitaet[] = aktivitaeten;
 
   const headerHeight = insets.top + 22;
   const bottomBarHeight = 100;
@@ -202,6 +201,22 @@ export default function TreffenScreen() {
             }
           />
         )}
+        ListEmptyComponent={
+          !laden ? (
+            <View
+              style={{
+                height: verfuegbareHoehe,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: 40,
+              }}
+            >
+              <Text style={styles.leerText}>
+                Noch keine Treffen. Erstelle das erste über den +-Button unten rechts.
+              </Text>
+            </View>
+          ) : null
+        }
         pagingEnabled
         snapToInterval={verfuegbareHoehe}
         snapToAlignment="start"
@@ -241,6 +256,14 @@ const styles = StyleSheet.create({
   hintergrundOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(255,255,255,0.16)",
+  },
+
+  leerText: {
+    color: "#555",
+    fontSize: 15,
+    fontWeight: "600",
+    textAlign: "center",
+    lineHeight: 22,
   },
 
   itemContainer: {

@@ -15,10 +15,8 @@ import {
   type UIKursDetail,
   type UIKursTeilnehmer,
 } from "../../api/kurse";
-import {
-  ladeUserLerngruppenFuerKurs,
-  type Lerngruppe,
-} from "../../data/userLerngruppen";
+import { ladeLerngruppenFuerModul } from "../../api/aktivitaeten";
+import { type Aktivitaet } from "../../data/aktivitaeten";
 
 // ─── Einzelne Teilnehmer-Zeile ────────────────────────────────────────────────
 
@@ -56,7 +54,7 @@ function LerngruppenZeile({
   gruppe,
   onPress,
 }: {
-  gruppe: Lerngruppe;
+  gruppe: Aktivitaet;
   onPress?: () => void;
 }) {
   return (
@@ -93,7 +91,7 @@ export default function KursDetailScreen() {
   const router = useRouter();
   const [kurs, setKurs] = useState<UIKursDetail | null>(null);
   const [laden, setLaden] = useState(true);
-  const [lerngruppen, setLerngruppen] = useState<Lerngruppe[]>([]);
+  const [lerngruppen, setLerngruppen] = useState<Aktivitaet[]>([]);
 
   const teilnehmer = kurs?.teilnehmer ?? [];
 
@@ -104,11 +102,10 @@ export default function KursDetailScreen() {
       setLaden(true);
       (async () => {
         try {
-          // Lerngruppen sind noch Mock (kommen mit dem Treffen-Tab); für echte
-          // Modul-ids liefert der Mock einfach eine leere Liste.
+          // Lerngruppen = Aktivitäten, die an dieses Modul gekoppelt sind.
           const [detail, gruppen] = await Promise.all([
             ladeKursDetail(id),
-            ladeUserLerngruppenFuerKurs(id),
+            ladeLerngruppenFuerModul(id),
           ]);
           if (!abgebrochen) {
             setKurs(detail);
