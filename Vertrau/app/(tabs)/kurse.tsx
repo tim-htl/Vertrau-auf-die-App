@@ -114,11 +114,14 @@ function SammelKarte({
   beschreibung,
   icon,
   children,
+  aktion,
 }: {
   titel: string;
   beschreibung: string;
   icon: keyof typeof Ionicons.glyphMap;
   children: React.ReactNode;
+  // Optionaler Knopf oben rechts in der Kopfzeile (z. B. Bearbeiten).
+  aktion?: ReactNode;
 }) {
   const { width } = useWindowDimensions();
   const cardWidth = width - 36;
@@ -137,6 +140,8 @@ function SammelKarte({
               {beschreibung}
             </Text>
           </View>
+
+          {aktion ? <View style={styles.headerAktionRechts}>{aktion}</View> : null}
         </View>
 
         {children}
@@ -154,6 +159,8 @@ function KompakterEintrag({
   onPress,
   belegt,
   onToggleBelegt,
+  minus,
+  onMinus,
 }: {
   titel: string;
   beschreibung: string;
@@ -161,6 +168,9 @@ function KompakterEintrag({
   onPress: () => void;
   belegt?: boolean;
   onToggleBelegt?: () => void;
+  // Bearbeiten-Modus: roter Minus-Button links → Modul verlassen.
+  minus?: boolean;
+  onMinus?: () => void;
 }) {
   return (
     <Pressable
@@ -171,6 +181,12 @@ function KompakterEintrag({
       ]}
     >
       <View style={styles.compactItemMain}>
+        {minus ? (
+          <Pressable onPress={onMinus} hitSlop={8} style={styles.minusKnopf}>
+            <Ionicons name="remove-circle" size={26} color="#FF3B30" />
+          </Pressable>
+        ) : null}
+
         <View style={styles.compactIconBubble}>
           <Ionicons name={icon} size={20} color="#A0C3D2" />
         </View>
@@ -245,6 +261,7 @@ export default function KurseScreen() {
   const [meineKurse, setMeineKurse] = useState<UIMeinKurs[]>([]);
   const [katalog, setKatalog] = useState<UIKatalogModul[]>([]);
   const [laden, setLaden] = useState(true);
+  const [meineEdit, setMeineEdit] = useState(false);
   const [suche, setSuche] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -331,9 +348,26 @@ export default function KurseScreen() {
           beschreibung={
             laden && meineKurse.length === 0
               ? "Wird geladen…"
-              : `${meineKurse.length} belegte Module`
+              : meineEdit
+                ? "Tippe das rote Minus, um ein Modul zu verlassen"
+                : `${meineKurse.length} belegte Module`
           }
           icon="book"
+          aktion={
+            meineKurse.length > 0 ? (
+              <Pressable
+                onPress={() => setMeineEdit((v) => !v)}
+                hitSlop={8}
+                style={[styles.editKnopf, meineEdit ? styles.editKnopfAktiv : null]}
+              >
+                <Ionicons
+                  name={meineEdit ? "checkmark" : "create-outline"}
+                  size={20}
+                  color="#fff"
+                />
+              </Pressable>
+            ) : undefined
+          }
         >
           {meineKurse.length === 0 ? (
             <View style={styles.emptyState}>
@@ -359,6 +393,8 @@ export default function KurseScreen() {
                   }
                   icon="book"
                   onPress={() => router.push(`/kurs/${kurs.id}`)}
+                  minus={meineEdit}
+                  onMinus={() => toggleBelegt(kurs.id)}
                 />
               );
             })
@@ -639,6 +675,26 @@ const styles = StyleSheet.create({
   aktionButtonBelegt: {
     backgroundColor: ACCENT,
     borderColor: ACCENT,
+  },
+
+  headerAktionRechts: {
+    marginLeft: 10,
+  },
+  editKnopf: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: BLACK,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  editKnopfAktiv: {
+    backgroundColor: "#34c759",
+  },
+  minusKnopf: {
+    marginRight: 8,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   searchContainer: {
