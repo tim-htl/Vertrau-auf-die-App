@@ -18,8 +18,10 @@ const MAX_BILDER = 10;
 export type ProfilData = {
   name: string;
   alter: string;
-  studiengang: string; // read-only (aus dem Onboarding)
-  uni: string; // read-only
+  studiengang: string; // Anzeigename
+  studiengangId: string | null; // für PATCH /me (Uni ergibt sich daraus)
+  uni: string; // Anzeigename
+  uniId: string | null; // nur für den Studiengang-Picker (nicht persistiert)
   bilder: (string | null)[];
   bio: string;
   hobbies: string[]; // Namen
@@ -38,7 +40,9 @@ export async function ladeMeinProfil(): Promise<ProfilData> {
     name: me.name,
     alter: me.alter != null ? String(me.alter) : "",
     studiengang: me.studiengang?.name ?? "",
+    studiengangId: me.studiengangId ?? null,
     uni: me.uni?.name ?? "",
+    uniId: me.uni?.id ?? null,
     bilder,
     bio: me.kurzbeschreibung ?? "",
     hobbies: me.hobbies.map((h) => h.name),
@@ -65,8 +69,18 @@ export async function speichereMeinProfil(data: ProfilData): Promise<void> {
   );
   const bilder = hochgeladen.filter((b): b is string => !!b);
 
-  // 2. Basis-Profil (name/alter/studiengang sind read-only → nicht senden).
-  await patchMe({ kurzbeschreibung: data.bio.trim() || null, bilder });
+  // 2. Basis-Profil inkl. Stammdaten. Name/Alter/Studiengang sind VORERST
+  //    editierbar (Übergangslösung, siehe Pre-Launch-TODO); die Uni ergibt
+  //    sich aus dem Studiengang, es gibt kein eigenes uniId am Profil.
+  const alterTrim = data.alter.trim();
+  const alterNum = alterTrim === "" ? null : Number.parseInt(alterTrim, 10);
+  await patchMe({
+    name: data.name.trim() || undefined,
+    alter: Number.isFinite(alterNum as number) ? (alterNum as number) : null,
+    kurzbeschreibung: data.bio.trim() || null,
+    bilder,
+    studiengangId: data.studiengangId,
+  });
 
   // 3. Hobbies: Namen → DB-ids.
   const hobbyKatalog = await getHobbies();
