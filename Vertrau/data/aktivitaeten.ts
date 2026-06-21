@@ -30,6 +30,8 @@ export type Aktivitaet = {
   // "public" = jeder kann beitreten (Standard). "private" = nur Eingeladene.
   // Optional aus Backward-Compat-Gründen mit DEMO_AKTIVITAETEN.
   sichtbarkeit?: Sichtbarkeit;
+  // Profile-id des Admins (vom Backend gesetzt) — für "bin ich Admin?".
+  adminId?: string;
 };
 
 // ─── Demo-Daten ───────────────────────────────────────────────────────────────

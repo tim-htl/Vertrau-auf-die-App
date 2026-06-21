@@ -87,19 +87,6 @@ export function AktivitaetKarte({
 
           <View style={styles.heroOverlay} />
 
-          <View style={styles.topBar}>
-
-          </View>
-
-          <View style={styles.heroBottom}>
-            <Text style={styles.kicker} numberOfLines={2}>
-              
-            </Text>
-
-            <View style={styles.cta}>
-              <Text style={styles.ctaText}>MITMACHEN</Text>
-            </View>
-          </View>
         </View>
 
         <View style={styles.content}>

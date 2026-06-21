@@ -53,7 +53,7 @@ function mapChat(c: ChatListItem, ich: string | null): ChatItem {
   }
   return {
     id: c.id,
-    name: c.aktivitaet?.name ?? "Gruppe",
+    name: c.aktivitaet?.titel ?? "Gruppe",
     image: c.aktivitaet?.bild ?? null,
     messages,
     linkType: "activity",

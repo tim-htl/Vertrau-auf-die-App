@@ -41,6 +41,7 @@ function mapAktivitaet(a: ApiAktivitaet): UIAktivitaet {
       bild: t.bild,
     })),
     sichtbarkeit: a.sichtbarkeit === "PUBLIC" ? "public" : "private",
+    adminId: a.admin.id,
   };
 }
 
@@ -68,4 +69,19 @@ export async function ladeLerngruppenFuerModul(
 export async function ladeAktivitaet(id: string): Promise<UIAktivitaet> {
   const res = await apiFetch<GetAktivitaetResponse>(`/aktivitaeten/${id}`);
   return mapAktivitaet(res.aktivitaet);
+}
+
+// POST /aktivitaeten/:id/join — beitreten. Fügt auch zum Gruppen-Chat hinzu
+// (Backend-Transaktion) und liefert die aktualisierte Aktivität zurück.
+export async function beitretenAktivitaet(id: string): Promise<UIAktivitaet> {
+  const res = await apiFetch<GetAktivitaetResponse>(`/aktivitaeten/${id}/join`, {
+    method: "POST",
+  });
+  return mapAktivitaet(res.aktivitaet);
+}
+
+// POST /aktivitaeten/:id/leave — verlassen. Entfernt auch die Chat-Mitgliedschaft
+// (Backend-Transaktion). Admins müssen vorher die Admin-Rolle übertragen.
+export async function verlassenAktivitaet(id: string): Promise<void> {
+  await apiFetch(`/aktivitaeten/${id}/leave`, { method: "POST" });
 }

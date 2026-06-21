@@ -186,7 +186,7 @@ export type AktivitaetStatus = "offen" | "voll" | "beendet";
 
 export type AktivitaetMini = {
   id: UUID;
-  name: string;
+  titel: string;
   bild: string | null;
 };
 

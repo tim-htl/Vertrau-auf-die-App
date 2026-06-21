@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Linking,
   NativeScrollEvent,
@@ -20,8 +21,13 @@ import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type Aktivitaet, type Teilnehmer } from "../../data/aktivitaeten";
 import { type Message, type ProposalStatus } from "../../data/chats";
-import { istBeigetreten, joinAktivitaet } from "../../data/joined";
-import { ladeAktivitaet } from "../../api/aktivitaeten";
+import {
+  beitretenAktivitaet,
+  ladeAktivitaet,
+  verlassenAktivitaet,
+} from "../../api/aktivitaeten";
+import { ApiError } from "../../lib/api";
+import { getCurrentSession } from "../../lib/supabase";
 
 const STORAGE_PREFIX = "messages_v4_";
 
@@ -175,7 +181,12 @@ export default function AktivitaetDetailScreen() {
   const [aktivitaet, setAktivitaet] = useState<Aktivitaet | undefined>(undefined);
   const [laden, setLaden] = useState(true);
   const [teilnehmerOffen, setTeilnehmerOffen] = useState(false);
-  const [beigetreten, setBeigetreten] = useState(false);
+  const [meineId, setMeineId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getCurrentSession().then((s) => setMeineId(s?.user.id ?? null));
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -190,9 +201,6 @@ export default function AktivitaetDetailScreen() {
       } finally {
         if (!abgebrochen) setLaden(false);
       }
-      // Beitritts-Status (noch Mock; echte Anbindung folgt in Etappe B).
-      const drin = await istBeigetreten(id);
-      if (!abgebrochen) setBeigetreten(drin);
     })();
     return () => {
       abgebrochen = true;
@@ -225,11 +233,41 @@ export default function AktivitaetDetailScreen() {
 
   const belegt = aktivitaet.teilnehmer.length;
   const frei = Math.max(0, aktivitaet.maxPlaetze - belegt);
+  const beigetreten =
+    !!meineId && aktivitaet.teilnehmer.some((t) => t.id === meineId);
+  const istAdmin = !!meineId && aktivitaet.adminId === meineId;
 
   async function teilnehmen() {
-    if (!aktivitaet || beigetreten) return;
-    await joinAktivitaet(aktivitaet.id);
-    setBeigetreten(true);
+    if (!aktivitaet || busy) return;
+    setBusy(true);
+    try {
+      const aktualisiert = await beitretenAktivitaet(aktivitaet.id);
+      setAktivitaet(aktualisiert);
+    } catch (e) {
+      Alert.alert(
+        "Beitreten fehlgeschlagen",
+        e instanceof ApiError ? e.message : "Bitte später erneut versuchen."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verlassen() {
+    if (!aktivitaet || busy) return;
+    setBusy(true);
+    try {
+      await verlassenAktivitaet(aktivitaet.id);
+      const aktualisiert = await ladeAktivitaet(aktivitaet.id);
+      setAktivitaet(aktualisiert);
+    } catch (e) {
+      Alert.alert(
+        "Verlassen fehlgeschlagen",
+        e instanceof ApiError ? e.message : "Bitte später erneut versuchen."
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function vorschlagen() {
@@ -501,27 +539,42 @@ export default function AktivitaetDetailScreen() {
         ) : (
           // modus === "teilnehmen"
           <View style={styles.aktionWrapper}>
-            <TouchableOpacity
-              style={[
-                styles.teilnehmenButton,
-                beigetreten && styles.teilnehmenButtonAktiv,
-              ]}
-              onPress={teilnehmen}
-              disabled={beigetreten}
-              activeOpacity={0.85}
-            >
-              {beigetreten && (
+            {istAdmin ? (
+              <View style={[styles.teilnehmenButton, styles.teilnehmenButtonAktiv]}>
                 <Ionicons
-                  name="checkmark"
-                  size={18}
+                  name="star"
+                  size={16}
                   color="#fff"
                   style={{ marginRight: 6 }}
                 />
-              )}
-              <Text style={styles.teilnehmenText}>
-                {beigetreten ? "Du nimmst teil" : "Teilnehmen"}
-              </Text>
-            </TouchableOpacity>
+                <Text style={styles.teilnehmenText}>Du bist Admin</Text>
+              </View>
+            ) : beigetreten ? (
+              <TouchableOpacity
+                style={[styles.teilnehmenButton, styles.verlassenButton]}
+                onPress={verlassen}
+                disabled={busy}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.teilnehmenText}>
+                  {busy ? "…" : "Treffen verlassen"}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.teilnehmenButton,
+                  frei === 0 && styles.teilnehmenButtonDisabled,
+                ]}
+                onPress={teilnehmen}
+                disabled={busy || frei === 0}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.teilnehmenText}>
+                  {busy ? "…" : frei === 0 ? "Voll" : "Teilnehmen"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </ScrollView>
@@ -758,6 +811,12 @@ const styles = StyleSheet.create({
   },
   teilnehmenButtonAktiv: {
     backgroundColor: "#1f8f4f",
+  },
+  verlassenButton: {
+    backgroundColor: "#e74c3c",
+  },
+  teilnehmenButtonDisabled: {
+    backgroundColor: "#b8b8be",
   },
   teilnehmenText: {
     color: "#fff",
