@@ -345,12 +345,95 @@ export async function chatRoutes(app: FastifyInstance) {
       throw badRequest("Proposal has already been decided.");
     }
 
-    const updated = await prisma.meetingProposal.update({
-      where: { id: req.params.id },
-      data: {
-        status: parsed.data.status,
-        decidedAt: new Date(),
-      },
+    const now = new Date();
+
+    // Gruppentreffen-Einladung: Die Annahme macht den Empfänger zum Teilnehmer
+    // und fügt ihn dem Gruppen-Chat hinzu (gleiche Logik wie PATCH
+    // /me/einladungen). Reine 1:1-Vorschläge (locationId/custom) setzen
+    // nur den Status — keine Aktivität, kein Beitritt.
+    if (proposal.aktivitaetId && parsed.data.status === "ACCEPTED") {
+      const aktivitaet = await prisma.aktivitaet.findUnique({
+        where: { id: proposal.aktivitaetId },
+        include: {
+          chat: { select: { id: true } },
+          _count: { select: { teilnehmer: true } },
+        },
+      });
+      if (!aktivitaet) throw notFound("Aktivität nicht gefunden.");
+      if (!aktivitaet.chat) throw new Error("Internal: activity has no chat row.");
+
+      const endTime = new Date(
+        aktivitaet.startAt.getTime() + aktivitaet.dauerMinuten * 60_000
+      );
+      if ((aktivitaet.beendetAt && aktivitaet.beendetAt <= now) || endTime <= now) {
+        throw badRequest("Activity has already ended.");
+      }
+
+      // Idempotenz: schon Teilnehmer? → nur Status markieren, nicht doppelt
+      // beitreten (und Voll-Check überspringen, da kein neuer Platz belegt wird).
+      const alreadyMember = await prisma.aktivitaetTeilnehmer.findUnique({
+        where: {
+          aktivitaetId_profileId: { aktivitaetId: aktivitaet.id, profileId: user.id },
+        },
+      });
+      if (!alreadyMember && aktivitaet._count.teilnehmer >= aktivitaet.maxPlaetze) {
+        throw badRequest("Activity is full.");
+      }
+
+      const groupChatId = aktivitaet.chat.id;
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const p = await tx.meetingProposal.update({
+          where: { id: req.params.id },
+          data: { status: "ACCEPTED", decidedAt: now },
+        });
+        // Backing-Einladung auf ACCEPTED. Sie existiert normalerweise (vom
+        // Einladungs-Endpoint), wird aber defensiv per upsert behandelt.
+        await tx.aktivitaetEinladung.upsert({
+          where: {
+            aktivitaetId_profileId: { aktivitaetId: aktivitaet.id, profileId: user.id },
+          },
+          update: { status: "ACCEPTED", decidedAt: now },
+          create: {
+            aktivitaetId: aktivitaet.id,
+            profileId: user.id,
+            invitedById: proposal.message.senderId,
+            status: "ACCEPTED",
+            decidedAt: now,
+          },
+        });
+        if (!alreadyMember) {
+          await tx.aktivitaetTeilnehmer.create({
+            data: { aktivitaetId: aktivitaet.id, profileId: user.id },
+          });
+          await tx.chatTeilnehmer.upsert({
+            where: {
+              chatId_profileId: { chatId: groupChatId, profileId: user.id },
+            },
+            update: {},
+            create: { chatId: groupChatId, profileId: user.id },
+          });
+        }
+        return p;
+      });
+
+      return { proposal: updated };
+    }
+
+    // Ablehnung oder 1:1-Vorschlag (ohne Aktivität): nur Status setzen.
+    // Bei Gruppentreffen-Ablehnung zusätzlich die Backing-Einladung ablehnen.
+    const updated = await prisma.$transaction(async (tx) => {
+      const p = await tx.meetingProposal.update({
+        where: { id: req.params.id },
+        data: { status: parsed.data.status, decidedAt: now },
+      });
+      if (proposal.aktivitaetId && parsed.data.status === "DECLINED") {
+        await tx.aktivitaetEinladung.updateMany({
+          where: { aktivitaetId: proposal.aktivitaetId, profileId: user.id },
+          data: { status: "DECLINED", decidedAt: now },
+        });
+      }
+      return p;
     });
 
     return { proposal: updated };

@@ -465,9 +465,15 @@ export async function aktivitaetRoutes(app: FastifyInstance) {
     reply.code(204).send();
   });
 
-  // POST /aktivitaeten/:id/einladungen — Admin lädt jemanden ein.
+  // POST /aktivitaeten/:id/einladungen — Admin lädt jemanden zu einem
+  // Gruppentreffen ein. Die Einladung besteht aus zwei Teilen, atomar erzeugt:
+  //   1) eine PENDING aktivitaet_einladung (unsichtbares Zugriffs-Backing —
+  //      macht das Treffen für den Eingeladenen sichtbar, auch wenn PRIVATE),
+  //   2) eine sichtbare Chat-Proposal-Karte (Message + MeetingProposal mit
+  //      aktivitaetId) im 1:1-Chat zwischen Admin und Eingeladenem.
+  // Die Annahme läuft über PATCH /meeting-proposals/:id (Beitritt + Gruppenchat).
   // Idempotent gegen frühere DECLINED/PENDING-Einladungen (re-invite),
-  // verweigert ACCEPTED (User ist schon Mitglied).
+  // verweigert ACCEPTED / bestehende Teilnahme (User ist schon Mitglied).
   app.post<{ Params: { id: string } }>("/aktivitaeten/:id/einladungen", async (req) => {
     const user = await app.requireAuth(req);
     const aktivitaet = await loadAktivitaet(req.params.id);
@@ -497,27 +503,77 @@ export async function aktivitaetRoutes(app: FastifyInstance) {
     if (existing?.status === "ACCEPTED") {
       throw badRequest("User is already a member of this activity.");
     }
-
-    const einladung = await prisma.aktivitaetEinladung.upsert({
+    const alreadyMember = await prisma.aktivitaetTeilnehmer.findUnique({
       where: {
         aktivitaetId_profileId: {
           aktivitaetId: aktivitaet.id,
           profileId: parsed.data.profileId,
         },
       },
-      update: {
-        status: "PENDING",
-        decidedAt: null,
-        invitedById: user.id,
+    });
+    if (alreadyMember) {
+      throw badRequest("User is already a member of this activity.");
+    }
+
+    // Die Einladung wird als Nachricht im gemeinsamen 1:1-Chat zugestellt —
+    // ohne Match (= ohne DIRECT-Chat) kann man niemanden einladen.
+    const directChat = await prisma.chat.findFirst({
+      where: {
+        typ: "DIRECT",
+        AND: [
+          { teilnehmer: { some: { profileId: user.id } } },
+          { teilnehmer: { some: { profileId: parsed.data.profileId } } },
+        ],
       },
-      create: {
-        aktivitaetId: aktivitaet.id,
-        profileId: parsed.data.profileId,
-        invitedById: user.id,
-      },
+      select: { id: true },
+    });
+    if (!directChat) {
+      throw badRequest(
+        "No direct chat with this user — you can only invite people you are matched with."
+      );
+    }
+
+    // Cover-Snapshot für die Chat-Karte (bilder[0] der Aktivität).
+    const cover = aktivitaet.bilder[0] ? [aktivitaet.bilder[0]] : [];
+
+    const result = await prisma.$transaction(async (tx) => {
+      const einladung = await tx.aktivitaetEinladung.upsert({
+        where: {
+          aktivitaetId_profileId: {
+            aktivitaetId: aktivitaet.id,
+            profileId: parsed.data.profileId,
+          },
+        },
+        update: { status: "PENDING", decidedAt: null, invitedById: user.id },
+        create: {
+          aktivitaetId: aktivitaet.id,
+          profileId: parsed.data.profileId,
+          invitedById: user.id,
+        },
+      });
+
+      const message = await tx.message.create({
+        data: { chatId: directChat.id, senderId: user.id },
+      });
+      const proposal = await tx.meetingProposal.create({
+        data: {
+          messageId: message.id,
+          titel: aktivitaet.titel,
+          bilder: cover,
+          startAt: aktivitaet.startAt,
+          aktivitaetId: aktivitaet.id,
+        },
+      });
+      // Chat-Aktivität markieren → Chat-Liste sortiert neueste oben.
+      await tx.chat.update({
+        where: { id: directChat.id },
+        data: { updatedAt: new Date() },
+      });
+
+      return { einladung, message, proposal };
     });
 
-    return { einladung };
+    return result;
   });
 
   // PATCH /me/einladungen/:aktivitaetId — Empfänger nimmt an oder lehnt ab.
