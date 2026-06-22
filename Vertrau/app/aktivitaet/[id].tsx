@@ -1,7 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import {
+  Stack,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,6 +31,7 @@ import {
   ladeAktivitaet,
   verlassenAktivitaet,
 } from "../../api/aktivitaeten";
+import { beantworteProposal } from "../../api/chats";
 import { ApiError } from "../../lib/api";
 import { getCurrentSession } from "../../lib/supabase";
 
@@ -157,7 +163,7 @@ export default function AktivitaetDetailScreen() {
     id,
     modus: modusParam,
     chatId,
-    proposalMessageId,
+    proposalId,
     proposalDatum,
     proposalUhrzeit,
     proposalStatus,
@@ -166,7 +172,7 @@ export default function AktivitaetDetailScreen() {
     id: string;
     modus?: Modus;
     chatId?: string;
-    proposalMessageId?: string;
+    proposalId?: string;
     proposalDatum?: string;
     proposalUhrzeit?: string;
     proposalStatus?: ProposalStatus;
@@ -206,6 +212,23 @@ export default function AktivitaetDetailScreen() {
       abgebrochen = true;
     };
   }, [id]);
+
+  // Stilles Neuladen bei jedem Fokus — z. B. nach dem Bearbeiten oder einem
+  // Beitritt erscheinen die Änderungen, ohne Spinner-Flackern.
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      let abgebrochen = false;
+      ladeAktivitaet(id)
+        .then((a) => {
+          if (!abgebrochen) setAktivitaet(a);
+        })
+        .catch(() => {});
+      return () => {
+        abgebrochen = true;
+      };
+    }, [id])
+  );
 
   if (!aktivitaet) {
     return (
@@ -307,33 +330,56 @@ export default function AktivitaetDetailScreen() {
   }
 
   async function aufEinladungAntworten(antwort: ProposalStatus) {
-    if (modus !== "einladung" || vorschlagVonMir || !chatId || !proposalMessageId) {
+    if (
+      modus !== "einladung" ||
+      vorschlagVonMir ||
+      !proposalId ||
+      (antwort !== "accepted" && antwort !== "declined") ||
+      busy
+    ) {
       return;
     }
-
-    const key = STORAGE_PREFIX + chatId;
-    const gespeichert = await AsyncStorage.getItem(key);
-    if (!gespeichert) {
+    setBusy(true);
+    try {
+      // Annahme macht backend-seitig zum Teilnehmer + Gruppenchat-Mitglied.
+      await beantworteProposal(proposalId, antwort);
       router.back();
-      return;
+    } catch (e) {
+      Alert.alert(
+        "Aktion fehlgeschlagen",
+        e instanceof ApiError ? e.message : "Bitte später erneut versuchen."
+      );
+    } finally {
+      setBusy(false);
     }
-
-    const bestehend: Message[] = JSON.parse(gespeichert);
-    const aktualisiert = bestehend.map((m) =>
-      m.id === proposalMessageId && m.proposal
-        ? { ...m, proposal: { ...m.proposal, status: antwort } }
-        : m
-    );
-
-    await AsyncStorage.setItem(key, JSON.stringify(aktualisiert));
-    router.back();
   }
 
   const maxVorschau = Math.min(aktivitaet.teilnehmer.length, 5);
 
   return (
     <>
-      <Stack.Screen options={{ title: aktivitaet.titel }} />
+      <Stack.Screen
+        options={{
+          title: aktivitaet.titel,
+          // Bearbeiten nur für den Admin — öffnet das Formular im Edit-Modus.
+          headerRight: istAdmin
+            ? () => (
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: "/aktivitaet/neu",
+                      params: { editId: aktivitaet.id },
+                    })
+                  }
+                  hitSlop={8}
+                  activeOpacity={0.6}
+                >
+                  <Ionicons name="create-outline" size={23} color="#007AFF" />
+                </TouchableOpacity>
+              )
+            : undefined,
+        }}
+      />
 
       <ScrollView
         ref={scrollRef}

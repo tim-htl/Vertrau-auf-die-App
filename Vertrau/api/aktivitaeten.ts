@@ -1,4 +1,5 @@
 import { apiFetch } from "../lib/api";
+import { uploadBild } from "./storage";
 import type { Aktivitaet as UIAktivitaet } from "../data/aktivitaeten";
 import type {
   Aktivitaet as ApiAktivitaet,
@@ -45,9 +46,9 @@ function mapAktivitaet(a: ApiAktivitaet): UIAktivitaet {
   };
 }
 
-// GET /aktivitaeten — Feed des Treffen-Tabs: nur echte GRUPPENTREFFEN
-// (ohne Modul). Lerngruppen (= Aktivität mit Modul) gehören NICHT hierher,
-// sondern sind über das jeweilige Modul erreichbar (siehe ladeLerngruppenFuerModul).
+// GET /aktivitaeten — Feed des Treffen-Tabs: nur kommende, echte GRUPPENTREFFEN
+// (ohne Modul). Lerngruppen (= Aktivität mit Modul) gehören nicht hierher,
+// sondern sind über das jeweilige Modul erreichbar (ladeLerngruppenFuerModul).
 export async function ladeAktivitaeten(): Promise<UIAktivitaet[]> {
   const res = await apiFetch<GetAktivitaetenResponse>(
     "/aktivitaeten?upcoming=true"
@@ -84,4 +85,119 @@ export async function beitretenAktivitaet(id: string): Promise<UIAktivitaet> {
 // (Backend-Transaktion). Admins müssen vorher die Admin-Rolle übertragen.
 export async function verlassenAktivitaet(id: string): Promise<void> {
   await apiFetch(`/aktivitaeten/${id}/leave`, { method: "POST" });
+}
+
+export type NeueAktivitaet = {
+  titel: string;
+  beschreibung: string;
+  adresseStrasse: string;
+  adressePlzOrt: string;
+  ortKurz: string;
+  koordinatenLat: number;
+  koordinatenLng: number;
+  startAt: string; // ISO
+  dauerMinuten: number;
+  maxPlaetze: number;
+  sichtbarkeit: "public" | "private";
+  modulId?: string | null;
+};
+
+// Aktivität erstellen. Der aktivitaet-cover-Bucket braucht die aktivitaetId,
+// daher: zuerst mit Platzhalter-Bild anlegen → lokale Bilder hochladen →
+// per PATCH die echten Bild-URLs setzen. Gibt die fertige Aktivität zurück.
+// Einladungen laufen separat über einladeZuAktivitaet (Chat-Proposals) und
+// werden vom Aufrufer NACH dem Erstellen verschickt.
+export async function erstelleAktivitaet(
+  input: NeueAktivitaet,
+  lokaleBilder: string[]
+): Promise<UIAktivitaet> {
+  const created = await apiFetch<GetAktivitaetResponse>("/aktivitaeten", {
+    method: "POST",
+    body: {
+      titel: input.titel,
+      beschreibung: input.beschreibung,
+      bilder: [FALLBACK_BILD], // Platzhalter; echte Bilder folgen per PATCH
+      adresseStrasse: input.adresseStrasse,
+      adressePlzOrt: input.adressePlzOrt,
+      ortKurz: input.ortKurz,
+      koordinatenLat: input.koordinatenLat,
+      koordinatenLng: input.koordinatenLng,
+      startAt: input.startAt,
+      dauerMinuten: input.dauerMinuten,
+      maxPlaetze: input.maxPlaetze,
+      sichtbarkeit: input.sichtbarkeit === "private" ? "PRIVATE" : "PUBLIC",
+      modulId: input.modulId ?? null,
+    },
+  });
+  const id = created.aktivitaet.id;
+
+  const hochgeladen = await Promise.all(
+    lokaleBilder.map((b) =>
+      b.startsWith("http")
+        ? Promise.resolve(b)
+        : uploadBild(b, "aktivitaet-cover", { aktivitaetId: id })
+    )
+  );
+  const bilder = hochgeladen.filter((b): b is string => !!b);
+
+  if (bilder.length > 0) {
+    const res = await apiFetch<GetAktivitaetResponse>(`/aktivitaeten/${id}`, {
+      method: "PATCH",
+      body: { bilder },
+    });
+    return mapAktivitaet(res.aktivitaet);
+  }
+  return mapAktivitaet(created.aktivitaet);
+}
+
+// PATCH /aktivitaeten/:id — bestehende Aktivität bearbeiten (nur Admin, im
+// Backend erzwungen). Wie beim Erstellen: neue lokale Bilder hochladen, bereits
+// hochgeladene http-URLs unverändert übernehmen. modulId bleibt unangetastet
+// (PATCH ändert die Modul-Zuordnung nicht). Gibt die aktualisierte Aktivität.
+export async function aktualisiereAktivitaet(
+  id: string,
+  input: NeueAktivitaet,
+  lokaleBilder: string[]
+): Promise<UIAktivitaet> {
+  const hochgeladen = await Promise.all(
+    lokaleBilder.map((b) =>
+      b.startsWith("http")
+        ? Promise.resolve(b)
+        : uploadBild(b, "aktivitaet-cover", { aktivitaetId: id })
+    )
+  );
+  const bilder = hochgeladen.filter((b): b is string => !!b);
+
+  const res = await apiFetch<GetAktivitaetResponse>(`/aktivitaeten/${id}`, {
+    method: "PATCH",
+    body: {
+      titel: input.titel,
+      beschreibung: input.beschreibung,
+      bilder,
+      adresseStrasse: input.adresseStrasse,
+      adressePlzOrt: input.adressePlzOrt,
+      ortKurz: input.ortKurz,
+      koordinatenLat: input.koordinatenLat,
+      koordinatenLng: input.koordinatenLng,
+      startAt: input.startAt,
+      dauerMinuten: input.dauerMinuten,
+      maxPlaetze: input.maxPlaetze,
+      sichtbarkeit: input.sichtbarkeit === "private" ? "PRIVATE" : "PUBLIC",
+    },
+  });
+  return mapAktivitaet(res.aktivitaet);
+}
+
+// POST /aktivitaeten/:id/einladungen — jemanden zu einem Gruppentreffen
+// einladen. Backend legt die (unsichtbare) Backing-Einladung + die sichtbare
+// Chat-Proposal-Karte im gemeinsamen 1:1-Chat an. profileId = echte Profil-id
+// der einzuladenden Person.
+export async function einladeZuAktivitaet(
+  aktivitaetId: string,
+  profileId: string
+): Promise<void> {
+  await apiFetch(`/aktivitaeten/${aktivitaetId}/einladungen`, {
+    method: "POST",
+    body: { profileId },
+  });
 }

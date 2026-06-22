@@ -1,14 +1,26 @@
 import { apiFetch } from "../lib/api";
 import { getCurrentSession } from "../lib/supabase";
-import type { ChatItem, Message as UIMessage } from "../data/chats";
+import type {
+  ChatItem,
+  Message as UIMessage,
+  MessageProposal as UIProposal,
+  ProposalStatus,
+} from "../data/chats";
 import type {
   ChatLastMessage,
   ChatListItem,
+  EinladungsStatus,
   GetChatMessagesResponse,
   GetMeChatsResponse,
+  MeetingProposal as ApiProposal,
   Message as ApiMessage,
+  PatchProposalResponse,
   PostMessageResponse,
 } from "../types/api";
+
+// Cover-Fallback, falls ein Proposal (noch) kein Bild trägt.
+const PROPOSAL_FALLBACK_BILD =
+  "https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?w=400";
 
 // Datenschicht für den Chat-Tab. Mappt das Backend-Chat-Shape auf das
 // namensbasierte UI-Shape (data/chats.ts), damit die Designer-UI bleibt.
@@ -23,6 +35,53 @@ async function eigeneId(): Promise<string | null> {
 function uhrzeit(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function datum(iso: string): string {
+  const d = new Date(iso);
+  const z = (n: number) => String(n).padStart(2, "0");
+  return `${z(d.getDate())}/${z(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+function mapProposalStatus(s: EinladungsStatus): ProposalStatus {
+  return s === "ACCEPTED" ? "accepted" : s === "DECLINED" ? "declined" : "pending";
+}
+
+// Backend-MeetingProposal → UI-Proposal. Drei Quellen: aktivitaetId
+// (Gruppentreffen), locationId (Zu-zweit an Location) oder custom (freie
+// Adresse). bilder[0] dient als Cover; bei custom sind es die User-Uploads.
+function mapProposal(mp: ApiProposal): UIProposal {
+  const istCustom =
+    !mp.aktivitaetId &&
+    !mp.locationId &&
+    !!mp.customAdresseStrasse &&
+    !!mp.customAdressePlzOrt;
+  return {
+    proposalId: mp.id,
+    coverbild: mp.bilder[0] ?? PROPOSAL_FALLBACK_BILD,
+    aktivitaetId: mp.aktivitaetId ?? undefined,
+    locationId: mp.locationId ?? undefined,
+    aktivitaet: mp.titel,
+    datum: datum(mp.startAt),
+    uhrzeit: uhrzeit(mp.startAt),
+    status: mapProposalStatus(mp.status),
+    ...(istCustom
+      ? {
+          customAdresse: {
+            strasse: mp.customAdresseStrasse as string,
+            plzOrt: mp.customAdressePlzOrt as string,
+          },
+          customKoordinaten:
+            mp.customKoordinatenLat != null && mp.customKoordinatenLng != null
+              ? {
+                  latitude: mp.customKoordinatenLat,
+                  longitude: mp.customKoordinatenLng,
+                }
+              : undefined,
+          customBilder: mp.bilder,
+        }
+      : {}),
+  };
 }
 
 // Die letzte Nachricht als einzelnes UI-Message-Element — die Chat-Liste
@@ -68,7 +127,7 @@ function mapMessage(m: ApiMessage, ich: string | null): UIMessage {
     time: uhrzeit(m.createdAt),
     senderName: m.sender?.name,
     text: m.text ?? undefined,
-    // Meeting-Proposals folgen in einem späteren Schritt.
+    proposal: m.meetingProposal ? mapProposal(m.meetingProposal) : undefined,
   };
 }
 
@@ -93,4 +152,17 @@ export async function sendeNachricht(chatId: string, text: string): Promise<UIMe
     body: { text },
   });
   return mapMessage(res.message, ich);
+}
+
+// Auf einen Treffens-Vorschlag antworten (PATCH /meeting-proposals/:id).
+// Bei einem Gruppentreffen-Vorschlag (aktivitaetId) macht "accepted" den
+// Empfänger backend-seitig zum Teilnehmer + Gruppenchat-Mitglied.
+export async function beantworteProposal(
+  proposalId: string,
+  antwort: "accepted" | "declined"
+): Promise<void> {
+  await apiFetch<PatchProposalResponse>(`/meeting-proposals/${proposalId}`, {
+    method: "PATCH",
+    body: { status: antwort === "accepted" ? "ACCEPTED" : "DECLINED" },
+  });
 }

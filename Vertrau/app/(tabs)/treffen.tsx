@@ -224,7 +224,7 @@ export default function TreffenScreen() {
             transform: [{ scale: pressed ? 0.94 : 1 }],
           },
         ]}
-        onPress={() => router.push("/aktivitaet/standort-waehlen")}
+        onPress={() => router.push("/aktivitaet/neu")}
       >
         <Ionicons name="add" size={30} color="#FF9A9E" />
       </Pressable>

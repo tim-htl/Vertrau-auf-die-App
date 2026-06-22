@@ -15,7 +15,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type ChatItem, type Message, type ProposalStatus } from "../../data/chats";
-import { ladeChats, ladeNachrichten, sendeNachricht } from "../../api/chats";
+import {
+  beantworteProposal as apiBeantworteProposal,
+  ladeChats,
+  ladeNachrichten,
+  sendeNachricht,
+} from "../../api/chats";
 
 // ─── Einzelne Nachricht ───────────────────────────────────────────────────────
 
@@ -265,6 +270,7 @@ export default function ChatDetailScreen() {
     const gemeinsameParams = {
       chatId: id,
       proposalMessageId: nachricht.id,
+      proposalId: proposal.proposalId ?? "",
       proposalDatum: proposal.datum,
       proposalUhrzeit: proposal.uhrzeit,
       proposalStatus: proposal.status ?? "pending",
@@ -303,18 +309,39 @@ export default function ChatDetailScreen() {
     });
   }
 
-  // Auf einen Treffens-Vorschlag antworten (Annehmen / Ablehnen).
-  // Meeting-Proposals werden aktuell noch nicht aus dem Backend geladen —
-  // die Anbindung (PATCH /meeting-proposals/:id) folgt in einem späteren
-  // Schritt; bis dahin nur lokaler State-Update.
-  function beantworteProposal(nachrichtId: string, antwort: ProposalStatus) {
+  // Auf einen Treffens-Vorschlag antworten (Annehmen / Ablehnen) → Backend
+  // (PATCH /meeting-proposals/:id). Optimistischer Status-Wechsel, bei Fehler
+  // Rückrollen. Nach Erfolg neu laden — bei Gruppentreffen ändert die Annahme
+  // zusätzlich die Mitgliedschaft (Teilnehmer + Gruppenchat).
+  async function beantworteProposal(nachricht: Message, antwort: ProposalStatus) {
+    const proposalId = nachricht.proposal?.proposalId;
+    if (!proposalId || (antwort !== "accepted" && antwort !== "declined")) return;
+
+    const vorher = nachricht.proposal?.status ?? "pending";
     setNachrichten((prev) =>
       prev.map((m) =>
-        m.id === nachrichtId && m.proposal
+        m.id === nachricht.id && m.proposal
           ? { ...m, proposal: { ...m.proposal, status: antwort } }
           : m
       )
     );
+    try {
+      await apiBeantworteProposal(proposalId, antwort);
+      const frisch = await ladeNachrichten(id);
+      setNachrichten(frisch);
+    } catch {
+      setNachrichten((prev) =>
+        prev.map((m) =>
+          m.id === nachricht.id && m.proposal
+            ? { ...m, proposal: { ...m.proposal, status: vorher } }
+            : m
+        )
+      );
+      Alert.alert(
+        "Aktion fehlgeschlagen",
+        "Deine Antwort konnte nicht gespeichert werden."
+      );
+    }
   }
 
   // Nachricht senden
@@ -396,7 +423,7 @@ export default function ChatDetailScreen() {
               <VorschlagsKarte
                 nachricht={item}
                 zeigeSender={senderSichtbar[index] ?? false}
-                onAntwort={(antwort) => beantworteProposal(item.id, antwort)}
+                onAntwort={(antwort) => beantworteProposal(item, antwort)}
                 onInfoPress={() => oeffneVorschlagsInfo(item)}
               />
             ) : (
