@@ -43,6 +43,8 @@ function RootNavigator() {
         <Stack.Screen name="modul/[id]" options={{ headerBackTitle: "Zurück" }} />
         <Stack.Screen name="treffen-vorschlagen" options={{ headerBackTitle: "Zurück" }} />
         <Stack.Screen name="location/[id]" options={{ headerBackTitle: "Zurück" }} />
+        <Stack.Screen name="vorschlag-erstellen" options={{ headerBackTitle: "Zurück" }} />
+        <Stack.Screen name="vorschlag/[id]" options={{ headerBackTitle: "Zurück" }} />
       </Stack.Protected>
     </Stack>
   );
