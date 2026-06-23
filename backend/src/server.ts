@@ -14,6 +14,7 @@ import { chatRoutes } from "./routes/chats.js";
 import { aktivitaetRoutes } from "./routes/aktivitaeten.js";
 import { matchingRoutes } from "./routes/matching.js";
 import { storageRoutes } from "./routes/storage.js";
+import { locationRoutes } from "./routes/locations.js";
 
 async function buildServer() {
   const app = Fastify({
@@ -41,6 +42,7 @@ async function buildServer() {
   await app.register(aktivitaetRoutes);
   await app.register(matchingRoutes);
   await app.register(storageRoutes);
+  await app.register(locationRoutes);
 
   return app;
 }

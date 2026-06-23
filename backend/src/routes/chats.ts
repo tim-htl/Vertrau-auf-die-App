@@ -1,6 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+
+// chat-media ist ein privater Bucket → für die Anzeige brauchen wir signierte
+// Lese-URLs. Proposal-bilder sind entweder öffentliche URLs (http…, z.B. bei
+// Location-/Aktivitäts-Vorschlägen) oder Storage-Pfade im chat-media-Bucket
+// (custom-Vorschläge mit eigenen Fotos), die wir beim Lesen signieren.
+const CHAT_MEDIA_BUCKET = "chat-media";
+const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1h
+
+function istOeffentlicheUrl(s: string): boolean {
+  return /^https?:\/\//i.test(s);
+}
 
 // Chat-Endpoints: Senden/Lesen von Nachrichten, Liste der Chats, Vorschläge.
 // Auto-Erzeugung von Gruppen-Chats (aus Aktivität) passiert in 2e,
@@ -59,7 +71,9 @@ const sendMessageSchema = z
 const sendProposalSchema = z
   .object({
     titel: z.string().trim().min(1).max(120),
-    bilder: z.array(z.string().url()).max(10).optional(),
+    // Entweder öffentliche URL (http…) oder chat-media-Storage-Pfad. Die
+    // Zugehörigkeit zum Chat wird im Handler geprüft (kein fremder Pfad).
+    bilder: z.array(z.string().min(1).max(500)).max(10).optional(),
     startAt: z.coerce.date(),
     locationId: z.string().uuid().optional(),
     aktivitaetId: z.string().uuid().optional(),
@@ -185,6 +199,30 @@ export async function chatRoutes(app: FastifyInstance) {
       const items = hasMore ? messages.slice(0, limit) : messages;
       const nextCursor = hasMore ? items[items.length - 1]?.id ?? null : null;
 
+      // chat-media-Pfade in den Proposal-bildern sammeln (nur die DIESES Chats)
+      // und in einem Rutsch signieren. Öffentliche URLs bleiben unverändert.
+      const zuSignieren = new Set<string>();
+      for (const m of items) {
+        for (const b of m.meetingProposal?.bilder ?? []) {
+          if (!istOeffentlicheUrl(b) && b.startsWith(`${req.params.id}/`)) {
+            zuSignieren.add(b);
+          }
+        }
+      }
+      const signedMap = new Map<string, string>();
+      if (zuSignieren.size > 0) {
+        const pfade = [...zuSignieren];
+        const { data } = await supabaseAdmin.storage
+          .from(CHAT_MEDIA_BUCKET)
+          .createSignedUrls(pfade, SIGNED_URL_TTL_SECONDS);
+        data?.forEach((eintrag, i) => {
+          const pfad = pfade[i];
+          if (pfad && eintrag.signedUrl) signedMap.set(pfad, eintrag.signedUrl);
+        });
+      }
+      const aufgeloesteBilder = (bilder: string[]): string[] =>
+        bilder.map((b) => signedMap.get(b) ?? b);
+
       return {
         messages: items.map((m) => ({
           id: m.id,
@@ -195,7 +233,12 @@ export async function chatRoutes(app: FastifyInstance) {
           text: m.text,
           mediaUrl: m.mediaUrl,
           mediaTyp: m.mediaTyp,
-          meetingProposal: m.meetingProposal,
+          meetingProposal: m.meetingProposal
+            ? {
+                ...m.meetingProposal,
+                bilder: aufgeloesteBilder(m.meetingProposal.bilder),
+              }
+            : null,
           createdAt: m.createdAt,
         })),
         nextCursor,
@@ -264,6 +307,18 @@ export async function chatRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       throw badRequest(
         "Invalid body: " + JSON.stringify(parsed.error.flatten().fieldErrors)
+      );
+    }
+
+    // bilder müssen entweder öffentliche URLs ODER Storage-Pfade DIESES Chats
+    // sein. Sonst könnte ein Client einen fremden chat-media-Pfad hinterlegen
+    // und sich beim Lesen eine Signed-URL dafür erzwingen (Information Disclosure).
+    const fremderPfad = (parsed.data.bilder ?? []).some(
+      (b) => !istOeffentlicheUrl(b) && !b.startsWith(`${req.params.id}/`)
+    );
+    if (fremderPfad) {
+      throw badRequest(
+        "Proposal bilder must be public URLs or chat-media paths of this chat."
       );
     }
 
