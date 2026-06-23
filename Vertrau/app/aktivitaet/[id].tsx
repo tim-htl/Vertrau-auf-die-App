@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   Stack,
   useFocusEffect,
@@ -25,7 +24,7 @@ import {
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type Aktivitaet, type Teilnehmer } from "../../data/aktivitaeten";
-import { type Message, type ProposalStatus } from "../../data/chats";
+import { type ProposalStatus } from "../../data/chats";
 import {
   beitretenAktivitaet,
   ladeAktivitaet,
@@ -35,9 +34,7 @@ import { beantworteProposal } from "../../api/chats";
 import { ApiError } from "../../lib/api";
 import { getCurrentSession } from "../../lib/supabase";
 
-const STORAGE_PREFIX = "messages_v4_";
-
-type Modus = "teilnehmen" | "vorschlagen" | "einladung";
+type Modus = "teilnehmen" | "einladung";
 
 // ─── Bilder-Slideshow ─────────────────────────────────────────────────────────
 
@@ -162,7 +159,6 @@ export default function AktivitaetDetailScreen() {
   const {
     id,
     modus: modusParam,
-    chatId,
     proposalId,
     proposalDatum,
     proposalUhrzeit,
@@ -171,7 +167,6 @@ export default function AktivitaetDetailScreen() {
   } = useLocalSearchParams<{
     id: string;
     modus?: Modus;
-    chatId?: string;
     proposalId?: string;
     proposalDatum?: string;
     proposalUhrzeit?: string;
@@ -252,8 +247,6 @@ export default function AktivitaetDetailScreen() {
     modus === "einladung" &&
     !vorschlagVonMir &&
     aktuellerProposalStatus === "pending";
-  const darfVorschlagen = modus === "vorschlagen" && !!chatId;
-
   const belegt = aktivitaet.teilnehmer.length;
   const frei = Math.max(0, aktivitaet.maxPlaetze - belegt);
   const beigetreten =
@@ -290,42 +283,6 @@ export default function AktivitaetDetailScreen() {
       );
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function vorschlagen() {
-    if (!darfVorschlagen || !aktivitaet || !chatId) return;
-
-    const jetzt = new Date();
-    const zeit = `${jetzt.getHours().toString().padStart(2, "0")}:${jetzt
-      .getMinutes()
-      .toString()
-      .padStart(2, "0")}`;
-
-    const neu: Message = {
-      id: `msg_${Date.now()}`,
-      fromMe: true,
-      time: zeit,
-      proposal: {
-        coverbild: aktivitaet.hintergrundbild,
-        aktivitaetId: aktivitaet.id,
-        aktivitaet: aktivitaet.titel,
-        datum: aktivitaet.datum,
-        uhrzeit: aktivitaet.uhrzeit,
-        status: "pending",
-      },
-    };
-
-    const key = STORAGE_PREFIX + chatId;
-    const gespeichert = await AsyncStorage.getItem(key);
-    const bestehend: Message[] = gespeichert ? JSON.parse(gespeichert) : [];
-    await AsyncStorage.setItem(key, JSON.stringify([...bestehend, neu]));
-
-    try {
-      router.dismiss(2);
-    } catch {
-      router.back();
-      setTimeout(() => router.back(), 0);
     }
   }
 
@@ -560,25 +517,6 @@ export default function AktivitaetDetailScreen() {
                   : aktuellerProposalStatus === "declined"
                   ? "Abgelehnt"
                   : "Warten auf Antwort"}
-              </Text>
-            )}
-          </View>
-        ) : modus === "vorschlagen" ? (
-          <View style={styles.aktionWrapper}>
-            <TouchableOpacity
-              style={[
-                styles.vorschlagenButton,
-                !darfVorschlagen && styles.vorschlagenButtonDisabled,
-              ]}
-              onPress={vorschlagen}
-              disabled={!darfVorschlagen}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.vorschlagenText}>Vorschlagen</Text>
-            </TouchableOpacity>
-            {!chatId && (
-              <Text style={styles.hinweisText}>
-                Öffne diesen Screen aus einem Chat, um einen Vorschlag zu senden.
               </Text>
             )}
           </View>

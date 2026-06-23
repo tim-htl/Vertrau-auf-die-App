@@ -268,14 +268,11 @@ export default function VorschlagErstellenScreen() {
       // und egal, woher der Chat geöffnet wurde (Chat-Tab oder Personen-Profil).
       router.dismissTo({ pathname: "/chat/[id]", params: { id: chatId } });
     } catch (e) {
-      const detail =
-        e instanceof ApiError
-          ? `${e.statusCode}: ${e.message}`
-          : e instanceof Error
-          ? e.message
-          : String(e);
-      console.warn("[vorschlag-erstellen] fehlgeschlagen:", detail, e);
-      Alert.alert("Vorschlagen fehlgeschlagen", detail);
+      console.warn("[vorschlag-erstellen] fehlgeschlagen:", e);
+      Alert.alert(
+        "Vorschlagen fehlgeschlagen",
+        e instanceof ApiError ? e.message : "Bitte später erneut versuchen."
+      );
     } finally {
       setSendend(false);
     }
