@@ -3,6 +3,7 @@
 export type ProposalStatus = "pending" | "accepted" | "declined";
 
 export type MessageProposal = {
+  proposalId?: string; // Backend-MeetingProposal-id (für Annehmen/Ablehnen)
   coverbild: string;
   locationId?: string; // bei Zu-zweit-Vorschlägen über DEMO_LOCATIONS gesetzt
   aktivitaetId?: string; // bei Gruppentreffen-Vorschlägen gesetzt

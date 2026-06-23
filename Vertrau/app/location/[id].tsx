@@ -2,10 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Linking,
   NativeScrollEvent,
@@ -20,10 +21,11 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { type Message, type ProposalStatus } from "../../data/chats";
-import { DEMO_LOCATIONS } from "../../data/locations";
-
-const STORAGE_PREFIX = "messages_v4_";
+import { type ProposalStatus } from "../../data/chats";
+import { type Location } from "../../data/locations";
+import { ladeLocation } from "../../api/locations";
+import { beantworteProposal, sendeVorschlag } from "../../api/chats";
+import { ApiError } from "../../lib/api";
 
 // ─── Bilder-Slideshow ─────────────────────────────────────────────────────────
 
@@ -135,6 +137,7 @@ export default function LocationDetailScreen() {
     id,
     chatId,
     proposalMessageId,
+    proposalId,
     proposalDatum,
     proposalUhrzeit,
     proposalStatus,
@@ -143,6 +146,7 @@ export default function LocationDetailScreen() {
     id: string;
     chatId?: string;
     proposalMessageId?: string;
+    proposalId?: string;
     proposalDatum?: string;
     proposalUhrzeit?: string;
     proposalStatus?: ProposalStatus;
@@ -152,7 +156,28 @@ export default function LocationDetailScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
 
-  const location = DEMO_LOCATIONS.find((l) => l.id === id);
+  const [location, setLocation] = useState<Location | undefined>(undefined);
+  const [laden, setLaden] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    let abgebrochen = false;
+    setLaden(true);
+    (async () => {
+      try {
+        const l = await ladeLocation(id);
+        if (!abgebrochen) setLocation(l);
+      } catch {
+        if (!abgebrochen) setLocation(undefined);
+      } finally {
+        if (!abgebrochen) setLaden(false);
+      }
+    })();
+    return () => {
+      abgebrochen = true;
+    };
+  }, [id]);
 
   const [datum, setDatum] = useState<Date | null>(null);
   const [uhrzeit, setUhrzeit] = useState<Date | null>(null);
@@ -177,7 +202,11 @@ export default function LocationDetailScreen() {
     return (
       <View style={styles.container}>
         <Stack.Screen options={{ title: "Location" }} />
-        <Text style={styles.leerText}>Location nicht gefunden.</Text>
+        {laden ? (
+          <ActivityIndicator style={{ marginTop: 40 }} color="#007AFF" />
+        ) : (
+          <Text style={styles.leerText}>Location nicht gefunden.</Text>
+        )}
       </View>
     );
   }
@@ -219,41 +248,29 @@ export default function LocationDetailScreen() {
 
   // ── Vorschlag senden ──
   async function vorschlagen() {
-    if (!darfVorschlagen || !location || !chatId || !datum || !uhrzeit) return;
-
-    const jetzt = new Date();
-    const zeit = `${jetzt.getHours().toString().padStart(2, "0")}:${jetzt
-      .getMinutes()
-      .toString()
-      .padStart(2, "0")}`;
-
-    const neu: Message = {
-      id: `msg_${Date.now()}`,
-      fromMe: true,
-      time: zeit,
-      proposal: {
-        coverbild: location.coverbild,
-        locationId: location.id,
-        aktivitaet: location.name,
-        datum: formatDatum(datum),
-        uhrzeit: formatUhrzeit(uhrzeit),
-        status: "pending",
-      },
-    };
-
-    const key = STORAGE_PREFIX + chatId;
-    const gespeichert = await AsyncStorage.getItem(key);
-    const bestehend: Message[] = gespeichert ? JSON.parse(gespeichert) : [];
-    const aktualisiert = [...bestehend, neu];
-    await AsyncStorage.setItem(key, JSON.stringify(aktualisiert));
-
-    // Zurück zum Chat: zwei Ebenen poppen (location → treffen-vorschlagen → chat).
-    // Fallback auf einzelnes back(), falls dismiss() in diesem Stack nicht greift.
+    if (!darfVorschlagen || !location || !chatId || !datum || !uhrzeit || busy) {
+      return;
+    }
+    setBusy(true);
     try {
-      router.dismiss(2);
-    } catch {
-      router.back();
-      setTimeout(() => router.back(), 0);
+      const start = new Date(datum);
+      start.setHours(uhrzeit.getHours(), uhrzeit.getMinutes(), 0, 0);
+      await sendeVorschlag(chatId, {
+        titel: location.name,
+        startAt: start.toISOString(),
+        locationId: location.id,
+        bilder: [location.coverbild], // Cover-Snapshot für die Chat-Karte
+      });
+      // Gezielt zurück zum konkreten Chat — egal über wie viele Zwischenscreens
+      // und egal, woher der Chat geöffnet wurde (Chat-Tab oder Personen-Profil).
+      router.dismissTo({ pathname: "/chat/[id]", params: { id: chatId } });
+    } catch (e) {
+      Alert.alert(
+        "Vorschlagen fehlgeschlagen",
+        e instanceof ApiError ? e.message : "Bitte später erneut versuchen."
+      );
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -261,28 +278,24 @@ export default function LocationDetailScreen() {
     if (
       !istVorschlagsInfoAnsicht ||
       vorschlagVonMir ||
-      !chatId ||
-      !proposalMessageId
+      !proposalId ||
+      (antwort !== "accepted" && antwort !== "declined") ||
+      busy
     ) {
       return;
     }
-
-    const key = STORAGE_PREFIX + chatId;
-    const gespeichert = await AsyncStorage.getItem(key);
-    if (!gespeichert) {
+    setBusy(true);
+    try {
+      await beantworteProposal(proposalId, antwort);
       router.back();
-      return;
+    } catch (e) {
+      Alert.alert(
+        "Aktion fehlgeschlagen",
+        e instanceof ApiError ? e.message : "Bitte später erneut versuchen."
+      );
+    } finally {
+      setBusy(false);
     }
-
-    const bestehend: Message[] = JSON.parse(gespeichert);
-    const aktualisiert = bestehend.map((m) =>
-      m.id === proposalMessageId && m.proposal
-        ? { ...m, proposal: { ...m.proposal, status: antwort } }
-        : m
-    );
-
-    await AsyncStorage.setItem(key, JSON.stringify(aktualisiert));
-    router.back();
   }
 
   return (

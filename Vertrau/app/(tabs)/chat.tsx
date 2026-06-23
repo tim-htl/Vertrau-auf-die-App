@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { useRouter } from "expo-router";
@@ -17,22 +16,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { INITIAL_CHATS, type ChatItem, type Message } from "../../data/chats";
-import { ladeJoinedAktivitaeten } from "../../data/joined";
-import { ladeUserChats } from "../../data/userAktivitaeten";
-
-// ─── Hilfsfunktion: Nachrichten laden ────────────────────────────────────────
-
-async function ladeNachrichten(
-  chatId: string,
-  initialFallback: Message[]
-): Promise<Message[]> {
-  const key = `messages_v4_${chatId}`;
-  const gespeichert = await AsyncStorage.getItem(key);
-  if (gespeichert) return JSON.parse(gespeichert);
-  await AsyncStorage.setItem(key, JSON.stringify(initialFallback));
-  return initialFallback;
-}
+import { type ChatItem } from "../../data/chats";
+import { ladeChats } from "../../api/chats";
 
 // ─── Einzelnes Chat-Listen-Element ───────────────────────────────────────────
 
@@ -86,23 +71,22 @@ export default function ChatScreen() {
   const [alleChats, setAlleChats] = useState<ChatItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Beim Fokus immer neueste letzte Nachricht laden und Aktivitätschats filtern.
+  // Beim Fokus die Chats aus dem Backend laden (GET /me/chats). Die Vorschau
+  // (letzte Nachricht) kommt direkt mit, kein Extra-Call pro Chat.
   useFocusEffect(
     useCallback(() => {
       async function laden() {
-        const joined = await ladeJoinedAktivitaeten();
-        const userChats = await ladeUserChats();
-        const alle = [...userChats, ...INITIAL_CHATS];
-        const gefiltert = alle.filter((chat) => {
-          if (chat.linkType !== "activity") return true;
-          return !!chat.linkId && joined.includes(chat.linkId);
-        });
-        setAlleChats(gefiltert);
+        let chats: ChatItem[] = [];
+        try {
+          chats = await ladeChats();
+        } catch {
+          chats = [];
+        }
+        setAlleChats(chats);
 
         const eintraege: Record<string, string> = {};
-        for (const chat of gefiltert) {
-          const nachrichten = await ladeNachrichten(chat.id, chat.messages);
-          const letzte = nachrichten[nachrichten.length - 1];
+        for (const chat of chats) {
+          const letzte = chat.messages[chat.messages.length - 1];
           const vorschau = letzte
             ? letzte.text ?? (letzte.proposal ? "Treffens-Vorschlag" : "")
             : "";

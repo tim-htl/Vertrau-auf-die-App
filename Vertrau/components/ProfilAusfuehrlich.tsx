@@ -211,6 +211,45 @@ function TagBlock({
   return <View style={stile.infoBlock}>{inhalt}</View>;
 }
 
+// Module mit id → jeder Tag ist antippbar und öffnet die Teilnehmer-Übersicht.
+// Nur in FREMDEN Profilen verwendet; im eigenen Profil ist der Block ein
+// Bearbeiten-Shortcut (TagBlock + onEditBereich).
+function ModulBlockKlickbar({
+  module,
+  onModulPress,
+}: {
+  module: { id: string; name: string }[];
+  onModulPress: (modulId: string) => void;
+}) {
+  return (
+    <View style={stile.infoBlock}>
+      <Text style={stile.infoLabel}>Module</Text>
+      {module.length > 0 ? (
+        <View style={stile.tagReihe}>
+          {module.map((m) => (
+            <TouchableOpacity
+              key={m.id}
+              activeOpacity={0.7}
+              style={stile.tag}
+              onPress={() => onModulPress(m.id)}
+            >
+              <Text style={stile.tagText}>{m.name}</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={12}
+                color="#1a1a1a"
+                style={{ marginLeft: 4 }}
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : (
+        <Text style={stile.infoWert}>—</Text>
+      )}
+    </View>
+  );
+}
+
 // ─── Hauptkomponente ──────────────────────────────────────────────────────────
 
 export function ProfilAusfuehrlich({
@@ -219,6 +258,8 @@ export function ProfilAusfuehrlich({
   onCarouselTouch,
   bottomPadding = 0,
   onEditBereich,
+  moduleItems,
+  onModulPress,
 }: {
   profil: ApProfil;
   // Breite explizit, damit die AP auch als Pager-Seite korrekt layoutet.
@@ -228,6 +269,9 @@ export function ProfilAusfuehrlich({
   bottomPadding?: number;
   // Optional: nur im eigenen Profil aktiv. Fremde Profile bleiben read-only.
   onEditBereich?: (bereich: ProfilEditBereich) => void;
+  // Optional: Module mit id (fremde Profile) → einzelne Kurse antippbar.
+  moduleItems?: { id: string; name: string }[];
+  onModulPress?: (modulId: string) => void;
 }) {
   const { width } = useWindowDimensions();
   const apBreite = breite ?? width;
@@ -270,11 +314,15 @@ export function ProfilAusfuehrlich({
         <InfoBlock label="Uni" wert={profil.uni} />
         <InfoBlock label="Studiengang" wert={profil.studiengang} />
 
-        <TagBlock
-          label="Module"
-          items={profil.module}
-          onPress={onEditBereich ? () => onEditBereich("module") : undefined}
-        />
+        {moduleItems && onModulPress ? (
+          <ModulBlockKlickbar module={moduleItems} onModulPress={onModulPress} />
+        ) : (
+          <TagBlock
+            label="Module"
+            items={profil.module}
+            onPress={onEditBereich ? () => onEditBereich("module") : undefined}
+          />
+        )}
 
         <TagBlock
           label="Hobbies"

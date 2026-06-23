@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   StyleSheet,
@@ -9,11 +10,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { DEMO_STUDIENGANG, type Teilnehmer } from "../../data/kurse";
 import {
-  ladeUserLerngruppenFuerKurs,
-  type Lerngruppe,
-} from "../../data/userLerngruppen";
+  ladeKursDetail,
+  type UIKursDetail,
+  type UIKursTeilnehmer,
+} from "../../api/kurse";
+import { ladeLerngruppenFuerModul } from "../../api/aktivitaeten";
+import { type Aktivitaet } from "../../data/aktivitaeten";
 
 // ─── Einzelne Teilnehmer-Zeile ────────────────────────────────────────────────
 
@@ -21,7 +24,7 @@ function TeilnehmerZeile({
   person,
   onPress,
 }: {
-  person: Teilnehmer;
+  person: UIKursTeilnehmer;
   onPress?: () => void;
 }) {
   return (
@@ -51,7 +54,7 @@ function LerngruppenZeile({
   gruppe,
   onPress,
 }: {
-  gruppe: Lerngruppe;
+  gruppe: Aktivitaet;
   onPress?: () => void;
 }) {
   return (
@@ -86,18 +89,33 @@ function LerngruppenZeile({
 export default function KursDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [lerngruppen, setLerngruppen] = useState<Lerngruppe[]>([]);
+  const [kurs, setKurs] = useState<UIKursDetail | null>(null);
+  const [laden, setLaden] = useState(true);
+  const [lerngruppen, setLerngruppen] = useState<Aktivitaet[]>([]);
 
-  const kurs = DEMO_STUDIENGANG.meineKurse.find((k) => k.id === id);
   const teilnehmer = kurs?.teilnehmer ?? [];
 
   useFocusEffect(
     useCallback(() => {
       let abgebrochen = false;
       if (!id) return () => {};
+      setLaden(true);
       (async () => {
-        const liste = await ladeUserLerngruppenFuerKurs(id);
-        if (!abgebrochen) setLerngruppen(liste);
+        try {
+          // Lerngruppen = Aktivitäten, die an dieses Modul gekoppelt sind.
+          const [detail, gruppen] = await Promise.all([
+            ladeKursDetail(id),
+            ladeLerngruppenFuerModul(id),
+          ]);
+          if (!abgebrochen) {
+            setKurs(detail);
+            setLerngruppen(gruppen);
+          }
+        } catch {
+          if (!abgebrochen) setKurs(null);
+        } finally {
+          if (!abgebrochen) setLaden(false);
+        }
       })();
       return () => {
         abgebrochen = true;
@@ -119,11 +137,13 @@ export default function KursDetailScreen() {
 
       {/* Kurs-Kopf */}
       <View style={styles.kopf}>
-        <Text style={styles.kursName}>{kurs?.name ?? "Unbekannter Kurs"}</Text>
-        {kurs?.ects !== undefined && (
+        <Text style={styles.kursName}>
+          {kurs?.name ?? (laden ? "Lädt…" : "Modul nicht gefunden")}
+        </Text>
+        {kurs && (
           <Text style={styles.kursMeta}>
-            {kurs.ects} ECTS
-            {kurs.semester !== undefined && ` · ${kurs.semester}. Semester`}
+            {kurs.ects != null ? `${kurs.ects} ECTS · ` : ""}Nr. {kurs.nummer} ·{" "}
+            {kurs.anzahlTeilnehmer} Teilnehmer
           </Text>
         )}
       </View>
@@ -175,11 +195,7 @@ export default function KursDetailScreen() {
         renderItem={({ item }) => (
           <TeilnehmerZeile
             person={item}
-            onPress={
-              item.personId
-                ? () => router.push(`/person/${item.personId}`)
-                : undefined
-            }
+            onPress={() => router.push(`/person/${item.id}`)}
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.trenner} />}
@@ -187,7 +203,11 @@ export default function KursDetailScreen() {
         contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           <View style={styles.leer}>
-            <Text style={styles.leerText}>Noch keine Teilnehmer.</Text>
+            {laden ? (
+              <ActivityIndicator />
+            ) : (
+              <Text style={styles.leerText}>Noch keine Teilnehmer.</Text>
+            )}
           </View>
         }
       />

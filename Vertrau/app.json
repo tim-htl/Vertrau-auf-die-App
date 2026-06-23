@@ -51,7 +51,8 @@
         {
           "locationWhenInUsePermission": "Die App verwendet deinen Standort nicht – dieser Hinweis ist nur für die Adressprüfung nötig."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,0 +1,581 @@
+// Prisma schema for the Vertrau-auf-die-App backend.
+//
+// `Profile.id` is the same UUID as Supabase's `auth.users.id`. We do not
+// model the auth.users table here (it lives in the `auth` schema and is
+// owned by Supabase). The Profile row is created server-side after sign-in
+// via `POST /auth/sync` and stays 1:1 with the auth user.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  USER
+  EVENT_ADMIN
+  DEV_ADMIN
+}
+
+enum Abschluss {
+  BACHELOR
+  MASTER
+  STAATSEXAMEN
+  PROMOTION
+  SONSTIGES
+}
+
+enum AktivitaetSichtbarkeit {
+  PUBLIC
+  PRIVATE
+}
+
+enum EinladungsStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum ChatTyp {
+  DIRECT // 1:1 aus gegenseitigem Match — exakt zwei Teilnehmer
+  GROUP  // automatisch aus einer Aktivitaet erzeugt — N Teilnehmer
+}
+
+enum MessageMediaTyp {
+  IMAGE
+  VIDEO
+}
+
+enum LocationKategorie {
+  CAFE
+  RESTAURANT
+  BAR
+  UNI           // Mensa, Bibliothek, Hörsaal
+  SPORT         // Boulderhalle, Gym, Schwimmhalle
+  PARK          // Mauerpark, Tempelhofer Feld
+  KULTUR        // Theater, Museum, Kino
+  ENTERTAINMENT // Gamestate, Bowling, Spielhalle
+  SONSTIGES
+}
+
+enum LikeKind {
+  LIKED   // klassischer Right-Swipe — wird gegen Reverse-Like geprüft, kann Match auslösen
+  PASSED  // Left-Swipe — Nope; Profil taucht im Swipe-Queue nicht mehr auf
+}
+
+model Profile {
+  id   String @id @db.Uuid
+  role Role   @default(USER)
+
+  name             String
+  geburtsdatum     DateTime? @db.Date
+  kurzbeschreibung String?
+  bilder           String[]  @default([])
+
+  studiengangId String?      @db.Uuid
+  studiengang   Studiengang? @relation(fields: [studiengangId], references: [id], onDelete: SetNull)
+
+  belegteModule UserModul[]
+  frageAntworten ProfilFrageAntwort[]
+  hobbies        UserHobby[]
+
+  aktivitaetenAlsAdmin    Aktivitaet[]          @relation("AktivitaetAdmin")
+  aktivitaetenTeilnahmen  AktivitaetTeilnehmer[]
+  aktivitaetenEinladungen AktivitaetEinladung[]  @relation("EinladungEmpfaenger")
+  versandteEinladungen    AktivitaetEinladung[]  @relation("EinladungAbsender")
+
+  chatTeilnahmen       ChatTeilnehmer[]
+  gesendeteNachrichten Message[]
+
+  likesGiven      Like[]  @relation("LikesGiven")
+  likesReceived   Like[]  @relation("LikesReceived")
+  matchesAsFirst  Match[] @relation("Profile1Matches")
+  matchesAsSecond Match[] @relation("Profile2Matches")
+
+  uniVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("profiles")
+}
+
+model Universitaet {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @unique
+  kuerzel      String   @unique
+  logoUrl      String?
+  emailDomains String[] @default([])
+
+  studiengaenge Studiengang[]
+  module        Modul[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("universitaeten")
+}
+
+model Studiengang {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  abschluss Abschluss
+
+  uniId        String       @db.Uuid
+  universitaet Universitaet @relation(fields: [uniId], references: [id], onDelete: Cascade)
+
+  bereiche Bereich[]
+  profile  Profile[]
+  module   StudiengangModul[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([uniId, name, abschluss])
+  @@map("studiengaenge")
+}
+
+model Bereich {
+  id   String @id @default(uuid()) @db.Uuid
+  name String
+  // Materialized path of ancestor slugs joined with "/", e.g. "wiwi/bwl".
+  // Always starts with this bereich's own slug at the leaf position.
+  path String
+
+  studiengangId String      @db.Uuid
+  studiengang   Studiengang @relation(fields: [studiengangId], references: [id], onDelete: Cascade)
+
+  parentId String?   @db.Uuid
+  parent   Bereich?  @relation("BereichTree", fields: [parentId], references: [id], onDelete: Cascade)
+  kinder   Bereich[] @relation("BereichTree")
+
+  // Module hängen seit dem Moses-Import nicht mehr am Bereich, sondern global
+  // an der Uni (Modul) und werden via studiengang_module M:N an Studiengänge
+  // geknüpft. Der Bereich-Baum bleibt als Curriculum-Gerüst (Pflicht/Wahl) für
+  // spätere Features erhalten, besitzt aber keine Module mehr.
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studiengangId, path])
+  @@index([studiengangId, parentId])
+  @@map("bereiche")
+}
+
+// Ein Modul existiert genau EINMAL pro Universität, eindeutig über die
+// Moses-Modulnummer (`nummer`). Dasselbe reale Modul wird von mehreren
+// Studiengängen angeboten (M:N über studiengang_module). So zeigen
+// user_module und aktivitaeten.modulId auf das GETEILTE Modul — Studierende
+// verschiedener Studiengänge landen im selben Modul (gemeinsame Lerngruppen).
+model Modul {
+  id     String  @id @default(uuid()) @db.Uuid
+  name   String
+  nummer String // Moses-Modulnummer, z. B. "40022"
+  ects   Int?
+  code   String?
+
+  uniId        String       @db.Uuid
+  universitaet Universitaet @relation(fields: [uniId], references: [id], onDelete: Cascade)
+
+  studiengaenge StudiengangModul[]
+  belegtVon     UserModul[]
+  lerngruppen   Aktivitaet[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([uniId, nummer])
+  @@map("module")
+}
+
+// M:N-Verknüpfung Studiengang ↔ Modul. Jede Zeile bedeutet "dieser
+// Studiengang bietet dieses Modul an". Ein Modul kann zu vielen
+// Studiengängen gehören und umgekehrt.
+model StudiengangModul {
+  studiengangId String @db.Uuid
+  modulId       String @db.Uuid
+
+  studiengang Studiengang @relation(fields: [studiengangId], references: [id], onDelete: Cascade)
+  modul       Modul       @relation(fields: [modulId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([studiengangId, modulId])
+  @@index([modulId])
+  @@map("studiengang_module")
+}
+
+// Gruppentreffen UND Lerngruppe in einer Tabelle. Lerngruppe = Aktivitaet
+// mit gesetztem modulId. Status (offen/voll/beendet) wird im Endpoint
+// berechnet und ist KEINE gespeicherte Spalte (single source of truth =
+// teilnehmer.count vs. maxPlaetze + beendetAt). Zu-zweit-Treffen sind
+// hier NICHT modelliert — die leben als proposal-Message in 1e.
+model Aktivitaet {
+  id String @id @default(uuid()) @db.Uuid
+
+  titel        String
+  beschreibung String
+
+  bilder String[] @default([])
+
+  adresseStrasse String
+  adressePlzOrt  String
+  ortKurz        String
+  koordinatenLat Float
+  koordinatenLng Float
+
+  // Startzeitpunkt (Datum + Uhrzeit kombiniert). Dauer in Minuten,
+  // damit Frontend Endzeit ableiten kann.
+  startAt      DateTime
+  dauerMinuten Int
+
+  maxPlaetze   Int
+  sichtbarkeit AktivitaetSichtbarkeit @default(PUBLIC)
+
+  // Wenn gesetzt: explizit als beendet markiert oder durch (startAt + dauer)
+  // in der Vergangenheit. Wird beim Lesen mit aktueller Zeit kombiniert,
+  // um Status zu berechnen.
+  beendetAt DateTime?
+
+  official Boolean @default(false)
+
+  adminId String  @db.Uuid
+  admin   Profile @relation("AktivitaetAdmin", fields: [adminId], references: [id], onDelete: Restrict)
+
+  // Lerngruppe-Verknüpfung. NULL = reines Gruppentreffen.
+  modulId String? @db.Uuid
+  modul   Modul?  @relation(fields: [modulId], references: [id], onDelete: SetNull)
+
+  // Optionaler Anker auf eine Default-Location (z. B. Café aus Kooperation).
+  // Bleibt nullable — eigene Adresse hat Vorrang im UI. NULL = freier Ort.
+  locationId String?   @db.Uuid
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  teilnehmer   AktivitaetTeilnehmer[]
+  einladungen  AktivitaetEinladung[]
+  chat         Chat?
+  meetingProposals MeetingProposal[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sichtbarkeit, startAt])
+  @@index([modulId])
+  @@index([locationId])
+  @@map("aktivitaeten")
+}
+
+model AktivitaetTeilnehmer {
+  aktivitaetId String @db.Uuid
+  profileId    String @db.Uuid
+
+  aktivitaet Aktivitaet @relation(fields: [aktivitaetId], references: [id], onDelete: Cascade)
+  profile    Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([aktivitaetId, profileId])
+  @@map("aktivitaet_teilnehmer")
+}
+
+// Einladungen NUR für private Treffen. Public-Treffen brauchen keine
+// Einladungen (jeder kann direkt beitreten -> Eintrag in
+// aktivitaet_teilnehmer). Bei accept wird zusätzlich ein
+// aktivitaet_teilnehmer-Eintrag erzeugt (Application-Logik in Phase 3).
+model AktivitaetEinladung {
+  aktivitaetId String           @db.Uuid
+  profileId    String           @db.Uuid
+  status       EinladungsStatus @default(PENDING)
+
+  // Wer hat eingeladen. NULL falls Einlader seinen Account später löscht
+  // (Einladung bleibt bestehen, Anzeige "von: unbekannt").
+  invitedById String?  @db.Uuid
+
+  aktivitaet Aktivitaet @relation(fields: [aktivitaetId], references: [id], onDelete: Cascade)
+  profile    Profile    @relation("EinladungEmpfaenger", fields: [profileId], references: [id], onDelete: Cascade)
+  invitedBy  Profile?   @relation("EinladungAbsender", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  decidedAt DateTime?
+
+  @@id([aktivitaetId, profileId])
+  @@index([profileId, status])
+  @@map("aktivitaet_einladungen")
+}
+
+model UserModul {
+  profileId String  @db.Uuid
+  modulId   String  @db.Uuid
+  semester  Int?
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  modul   Modul   @relation(fields: [modulId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([profileId, modulId])
+  @@map("user_module")
+}
+
+// Katalog "witziger" Profil-Fragen. User wählen daraus bis zu 5 aus und
+// beantworten sie auf ihrem Profil (-> profil_frage_antworten). Katalog wird
+// von uns gepflegt; Entfernen einer Frage läuft über aktiv=false
+// (Soft-Delete wie locations), damit bestehende Antworten erhalten bleiben.
+model ProfilFrage {
+  id   String @id @default(uuid()) @db.Uuid
+  text String @unique
+
+  aktiv      Boolean @default(true)
+  sortierung Int     @default(0)
+
+  antworten ProfilFrageAntwort[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("profil_fragen")
+}
+
+// Antwort eines Users auf eine Profil-Frage. Teil des öffentlichen
+// Profilinhalts (wie belegte Module). Max. 5 pro Profil und max. 200
+// Zeichen Antwortlänge werden im Endpoint erzwungen, nicht in der DB.
+// position = Anzeige-Reihenfolge auf dem Profil.
+model ProfilFrageAntwort {
+  profileId String @db.Uuid
+  frageId   String @db.Uuid
+
+  antwort  String
+  position Int
+
+  profile Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  frage   ProfilFrage @relation(fields: [frageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([profileId, frageId])
+  @@map("profil_frage_antworten")
+}
+
+// Hobby-Katalog (ersetzt die frühere Freitext-Spalte profiles.hobbies).
+// icon = Ionicons-Name fürs Frontend. Entfernen läuft über aktiv=false
+// (Soft-Delete wie locations/profil_fragen), damit User-Zuordnungen
+// erhalten bleiben.
+model Hobby {
+  id   String @id @default(uuid()) @db.Uuid
+  name String @unique
+  icon String
+
+  aktiv      Boolean @default(true)
+  sortierung Int     @default(0)
+
+  users UserHobby[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("hobbies")
+}
+
+// Hobby-Zuordnung eines Users — Join-Tabelle analog user_module.
+model UserHobby {
+  profileId String @db.Uuid
+  hobbyId   String @db.Uuid
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  hobby   Hobby   @relation(fields: [hobbyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([profileId, hobbyId])
+  @@map("user_hobbies")
+}
+
+// ── Chat-System ──────────────────────────────────────────────────────────────
+//
+// Chats sind ENTWEDER DIRECT (1:1 aus gegenseitigem Like in Phase 8) ODER
+// GROUP (automatisch aus einer Aktivitaet). Anzeigename wird im Frontend
+// dynamisch abgeleitet — kein name-Feld hier. updatedAt dient als Sortier-
+// Schlüssel für die Chat-Liste ("zuletzt aktiv zuerst").
+model Chat {
+  id  String  @id @default(uuid()) @db.Uuid
+  typ ChatTyp
+
+  // Bei GROUP gesetzt; 1:1-Bezug zur Aktivitaet (unique = max ein Chat pro
+  // Aktivitaet). Bei DIRECT NULL — Postgres erlaubt mehrere NULLs im unique
+  // Index, also kein Konflikt.
+  aktivitaetId String?     @unique @db.Uuid
+  aktivitaet   Aktivitaet? @relation(fields: [aktivitaetId], references: [id], onDelete: Cascade)
+
+  teilnehmer ChatTeilnehmer[]
+  messages   Message[]
+
+  // Backref für DIRECT-Chats, die aus einem Match entstanden sind.
+  // Unique constraint auf Match.chatId macht das zu einer echten 1:1-Relation.
+  match Match?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("chats")
+}
+
+model ChatTeilnehmer {
+  chatId    String @db.Uuid
+  profileId String @db.Uuid
+
+  joinedAt   DateTime  @default(now())
+  // Self-managed Marker: bis wann hat DIESER User Nachrichten gesehen.
+  // Wird beim Öffnen des Chats vom Backend aktualisiert. Unread-Count berechnet
+  // sich live aus COUNT(messages WHERE createdAt > lastReadAt).
+  lastReadAt DateTime?
+  stumm      Boolean   @default(false)
+
+  chat    Chat    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, profileId])
+  @@index([profileId])
+  @@map("chat_teilnehmer")
+}
+
+model Message {
+  id     String  @id @default(uuid()) @db.Uuid
+  chatId String  @db.Uuid
+  // Nullable + SET NULL: wenn User Account löscht, bleibt Nachricht im
+  // Chatverlauf, Absender wird zu "unbekannt". CASCADE würde Lücken erzeugen.
+  senderId String? @db.Uuid
+
+  text     String?
+  mediaUrl String?
+  mediaTyp MessageMediaTyp?
+
+  createdAt DateTime @default(now())
+
+  chat   Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender Profile? @relation(fields: [senderId], references: [id], onDelete: SetNull)
+
+  meetingProposal MeetingProposal?
+
+  @@index([chatId, createdAt])
+  @@map("messages")
+}
+
+// Treffen-Vorschlag — 1:1-Erweiterung einer Message. Drei Quellen-Modi via
+// Nullable-Spalten (genau eine Quelle pro Vorschlag, von der Application
+// erzwungen): locationId, aktivitaetId, oder custom* Felder.
+//
+// titel + bilder + startAt sind Snapshots am Vorschlags-Zeitpunkt — bleiben
+// stabil, auch wenn die referenzierte Location/Aktivitaet später umbenannt
+// oder gelöscht wird.
+model MeetingProposal {
+  id        String  @id @default(uuid()) @db.Uuid
+  messageId String  @unique @db.Uuid
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  titel   String
+  // bilder[0] = Cover für die Chat-Karte. Bei Location-/Aktivitäts-Quelle
+  // typischerweise genau ein Snapshot-Eintrag, bei Custom mehrere User-Uploads.
+  bilder  String[] @default([])
+  startAt DateTime
+
+  status    EinladungsStatus @default(PENDING)
+  decidedAt DateTime?
+
+  locationId String?   @db.Uuid
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  aktivitaetId String?     @db.Uuid
+  aktivitaet   Aktivitaet? @relation(fields: [aktivitaetId], references: [id], onDelete: SetNull)
+
+  // Nur bei Custom-Vorschlag gesetzt (keine locationId, keine aktivitaetId).
+  customAdresseStrasse String?
+  customAdressePlzOrt  String?
+  customKoordinatenLat Float?
+  customKoordinatenLng Float?
+
+  createdAt DateTime @default(now())
+
+  @@map("meeting_proposals")
+}
+
+// Standort-Katalog: Kooperationspartner (isPartner=true) und allgemeine
+// Default-Plätze. Pre-seeded; weitere via Admin-UI in Phase 7.
+model Location {
+  id           String            @id @default(uuid()) @db.Uuid
+  name         String
+  beschreibung String
+  kategorie    LocationKategorie
+
+  // bilder[0] = Cover. Mehrere Bilder = Slideshow im Detail-View.
+  bilder String[] @default([])
+
+  adresseStrasse String
+  adressePlzOrt  String
+  koordinatenLat Float
+  koordinatenLng Float
+
+  isPartner Boolean @default(false)
+  // Soft-Delete-Flag: Admin kann Location deaktivieren ohne historische
+  // Vorschläge zu reißen. Frontend filtert aktiv=true in der Auswahl.
+  aktiv     Boolean @default(true)
+
+  aktivitaeten Aktivitaet[]
+  proposals    MeetingProposal[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, adresseStrasse])
+  @@index([kategorie, aktiv])
+  @@map("locations")
+}
+
+// ── Matching (Phase 2f) ─────────────────────────────────────────────────────
+//
+// Like: eine Swipe-Entscheidung des Likers über das Liked-Profil. Sowohl
+// LIKED (Right-Swipe) als auch PASSED (Left-Swipe) werden festgehalten,
+// damit der Swipe-Queue niemandem ein bereits gesehenes Profil noch einmal
+// vorschlägt. Nur LIKED zählt für die Match-Auflösung.
+//
+// Match: kanonisches Paar (profile1Id < profile2Id alphanumerisch sortiert,
+// vom Backend erzwungen). Stellt sicher, dass ein Match nur einmal existiert,
+// egal wer zuerst geliked hat. Hat 1:1-Bezug zu einem DIRECT-Chat, der
+// gleichzeitig erzeugt wird.
+model Like {
+  likerId String   @db.Uuid
+  likedId String   @db.Uuid
+  kind    LikeKind @default(LIKED)
+
+  liker Profile @relation("LikesGiven", fields: [likerId], references: [id], onDelete: Cascade)
+  liked Profile @relation("LikesReceived", fields: [likedId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([likerId, likedId])
+  // Für "wer hat mich geliked?" — schneller Lookup über den Empfänger
+  @@index([likedId, kind])
+  @@map("likes")
+}
+
+model Match {
+  profile1Id String @db.Uuid
+  profile2Id String @db.Uuid
+  // 1:1 zu einem DIRECT-Chat — Match löschen → Chat kaskadiert mit
+  chatId String @unique @db.Uuid
+
+  profile1 Profile @relation("Profile1Matches", fields: [profile1Id], references: [id], onDelete: Cascade)
+  profile2 Profile @relation("Profile2Matches", fields: [profile2Id], references: [id], onDelete: Cascade)
+  chat     Chat    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([profile1Id, profile2Id])
+  @@index([profile2Id])
+  @@map("matches")
+}

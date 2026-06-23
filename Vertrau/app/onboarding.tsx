@@ -32,6 +32,8 @@ import {
   modulnamenFuerStudiengang,
   studiengaengeFuerUni,
 } from "../data/onboarding-katalog";
+import { authSync } from "../api/me";
+import { signUpWithPassword } from "../lib/supabase";
 
 // ─── Onboarding-Wizard (Mock-first) ───────────────────────────────────────────
 //
@@ -227,16 +229,30 @@ export default function OnboardingScreen() {
           .filter((fa) => fa.antwort.length > 0),
       };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profil));
-await AsyncStorage.setItem("onboarding_completed", "true");
 
-router.replace("/(tabs)/profil");
-      // Designer-/Mock-Branch: KEIN echtes Konto. E-Mail + Passwort sind
-      // hier nur UI zum Gestalten. Direkt in die App. (Auf dem App-Branch
-      // erstellt dieser Schritt stattdessen den Account via signUp.)
-      router.replace("/(tabs)/profil");
+      // Account anlegen → Session entsteht → AuthGate wechselt zu den Tabs.
+      const session = await signUpWithPassword(entwurf.email.trim(), entwurf.passwort);
+      if (!session) {
+        // "Confirm email" aktiv (Production): noch keine Session. Profil
+        // bleibt lokal, der Nutzer bestätigt erst seine Mail.
+        Alert.alert(
+          "Fast geschafft",
+          "Wir haben dir eine Bestätigungs-E-Mail geschickt. Danach kannst du dich anmelden."
+        );
+        router.replace("/(auth)/login");
+        return;
+      }
+      // Profil im Backend anlegen (idempotent, Fehler non-blocking).
+      try {
+        await authSync(entwurf.name.trim());
+      } catch {
+        // Backend nicht erreichbar — Konto ist erstellt, Profil wird beim
+        // nächsten erfolgreichen Request gesynct.
+      }
+      // Session ist da → Guard rendert die Tabs, kein manuelles Navigieren.
     } catch (e) {
       setFehler(
-        e instanceof Error ? e.message : "Etwas ist schiefgelaufen."
+        e instanceof Error ? e.message : "Konto konnte nicht erstellt werden."
       );
       setLaedt(false);
     }

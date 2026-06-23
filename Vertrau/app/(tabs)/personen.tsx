@@ -20,10 +20,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PhotoStripCard } from "../../components/PhotoStripCard";
-import { DEMO_PERSONEN, type Person } from "../../data/personen";
-import { likePerson, resetSwipes } from "../../data/swipes";
+import { type Person } from "../../data/personen";
+import { ladeSwipeFeed, likePerson } from "../../api/personen";
 
-const STATIC_BACKGROUND = require("/Users/lindadang/Desktop/Vertrau-auf-die-App/Vertrau/assets/images/pack9.jpg");
+const STATIC_BACKGROUND = require("../../assets/images/pack9.jpg");
 
 const SCREEN_BG = "#FFFFFF";
 const CARD_BG = "rgba(255,255,255,0.12)";
@@ -238,7 +238,11 @@ export default function PersonenScreen() {
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setFeed(DEMO_PERSONEN);
+    // Swipe-Feed aus dem Backend (GET /personen/swipe) — Profile, die noch
+    // nicht geliked wurden, ohne den eigenen Account.
+    ladeSwipeFeed()
+      .then(setFeed)
+      .catch(() => setFeed([]));
 
     return () => {
       if (bannerTimer.current) {
@@ -281,9 +285,13 @@ export default function PersonenScreen() {
     }
   }
 
-  async function demoZuruecksetzen() {
-    await resetSwipes();
-    setFeed(DEMO_PERSONEN);
+  async function feedNeuLaden() {
+    setFeed(null);
+    try {
+      setFeed(await ladeSwipeFeed());
+    } catch {
+      setFeed([]);
+    }
   }
 
   if (feed === null) {
@@ -303,19 +311,20 @@ export default function PersonenScreen() {
             </View>
 
             <Text style={styles.leerTitel} numberOfLines={2}>
-              für heute warst du genug am Handy :)
+              Du hast alle Profile gesehen
             </Text>
 
-            <Text style={styles.leerText} numberOfLines={2}>
-              gönn dir eine Pause — morgen warten neue Leute auf dich.
+            <Text style={styles.leerText} numberOfLines={3}>
+              Es sind aktuell keine weiteren Profile verfügbar. Schau später
+              wieder vorbei.
             </Text>
 
             <TouchableOpacity
               activeOpacity={0.82}
               style={[styles.resetKnopf, styles.neuSoft]}
-              onPress={demoZuruecksetzen}
+              onPress={feedNeuLaden}
             >
-              <Text style={styles.resetKnopfText}>Demo zurücksetzen</Text>
+              <Text style={styles.resetKnopfText}>Neu laden</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -348,6 +357,15 @@ export default function PersonenScreen() {
             onPanAktiv={(aktiv) => setListeScrollbar(!aktiv)}
           />
         )}
+        ListFooterComponent={
+          <View style={[styles.endeSeite, { height: karteHoehe }]}>
+            <Ionicons name="checkmark-done-outline" size={40} color={MUTED} />
+            <Text style={styles.endeTitel}>Das waren alle Profile</Text>
+            <Text style={styles.endeText}>
+              Du hast alle aktuell verfügbaren Profile durchgesehen.
+            </Text>
+          </View>
+        }
       />
 
       {matchInfo && (
@@ -555,6 +573,25 @@ const styles = StyleSheet.create({
     ...FUN_TYPO.body,
     marginTop: 8,
     maxWidth: 270,
+  },
+
+  endeSeite: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  endeTitel: {
+    ...FUN_TYPO.title,
+    fontSize: 22,
+    lineHeight: 26,
+    marginTop: 12,
+    textAlign: "center",
+  },
+  endeText: {
+    ...FUN_TYPO.body,
+    marginTop: 6,
+    maxWidth: 280,
+    textAlign: "center",
   },
 
   resetKnopf: {

@@ -24,17 +24,15 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { type Aktivitaet, type Sichtbarkeit, type Teilnehmer } from "../../data/aktivitaeten";
-import { INITIAL_CHATS } from "../../data/chats";
-import { DEMO_STUDIENGANG } from "../../data/kurse";
-import { DEMO_LOCATIONS } from "../../data/locations";
-import { ladeErstellerAlsTeilnehmer } from "../../data/meinProfil";
+import { type Sichtbarkeit } from "../../data/aktivitaeten";
 import {
+  aktualisiereAktivitaet,
+  einladeZuAktivitaet,
   erstelleAktivitaet,
-  ladeUserChats,
-  sendeAktivitaetsVorschlag,
-} from "../../data/userAktivitaeten";
-import { erstelleLerngruppe } from "../../data/userLerngruppen";
+  ladeAktivitaet,
+} from "../../api/aktivitaeten";
+import { ladeChats } from "../../api/chats";
+import { ApiError } from "../../lib/api";
 
 type Koordinaten = { latitude: number; longitude: number };
 
@@ -164,44 +162,25 @@ function parsePlzOrt(input: string): { plz: string; ort: string } {
 }
 
 export default function AktivitaetNeuScreen() {
-  const { kursId, locationId } = useLocalSearchParams<{
+  const { kursId, editId } = useLocalSearchParams<{
     kursId?: string;
-    locationId?: string;
+    editId?: string;
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const kurs = DEMO_STUDIENGANG.meineKurse.find((k) => k.id === kursId);
-  const istLerngruppe = !!kurs;
-  const vorgewaehlteLocation = locationId
-    ? DEMO_LOCATIONS.find((l) => l.id === locationId)
-    : undefined;
+  // Lerngruppe = Aktivität an einem Modul (kursId = modulId, kommt aus /kurs/[id]).
+  const istLerngruppe = !!kursId;
+  // Edit-Modus: bestehende Aktivität bearbeiten (editId aus der Detailseite).
+  const istEdit = !!editId;
 
-  const [bilder, setBilder] = useState<string[]>(
-    vorgewaehlteLocation ? [vorgewaehlteLocation.coverbild, ...vorgewaehlteLocation.bilder] : []
-  );
+  const [bilder, setBilder] = useState<string[]>([]);
   const [titel, setTitel] = useState("");
   const [beschreibung, setBeschreibung] = useState("");
-  const initStrasseHausnummer = vorgewaehlteLocation
-    ? parseStrasseHausnummer(vorgewaehlteLocation.adresse.strasse)
-    : { strasse: "", hausnummer: "" };
-  const initPlzOrt = vorgewaehlteLocation
-    ? parsePlzOrt(vorgewaehlteLocation.adresse.plzOrt)
-    : { plz: "", ort: "" };
-  const [strasse, setStrasse] = useState(initStrasseHausnummer.strasse);
-  const [hausnummer, setHausnummer] = useState(initStrasseHausnummer.hausnummer);
-  const [plz, setPlz] = useState(initPlzOrt.plz);
-  const [ort, setOrt] = useState(initPlzOrt.ort);
-  // Wenn Adresse aus Location kam, sofort als validiert markieren – Koordinaten
-  // sind im Katalog bereits hinterlegt, kein Geocoding nötig.
-  const [adresseValidiert, setAdresseValidiert] = useState<Adresse | null>(
-    vorgewaehlteLocation
-      ? {
-          strasse: vorgewaehlteLocation.adresse.strasse,
-          plzOrt: vorgewaehlteLocation.adresse.plzOrt,
-          koordinaten: vorgewaehlteLocation.koordinaten,
-        }
-      : null
-  );
+  const [strasse, setStrasse] = useState("");
+  const [hausnummer, setHausnummer] = useState("");
+  const [plz, setPlz] = useState("");
+  const [ort, setOrt] = useState("");
+  const [adresseValidiert, setAdresseValidiert] = useState<Adresse | null>(null);
   const [adressePruefung, setAdressePruefung] = useState(false);
   const [adresseFehler, setAdresseFehler] = useState<string | null>(null);
 
@@ -216,63 +195,109 @@ export default function AktivitaetNeuScreen() {
   const [eingeladen, setEingeladen] = useState<string[]>([]);
 
   const [sendend, setSendend] = useState(false);
+  // Im Edit-Modus erst laden + vorbefüllen, bevor das Formular erscheint.
+  const [ladeEdit, setLadeEdit] = useState(istEdit);
 
   const [einladbareKontakte, setEinladbareKontakte] = useState<
     EinladbarerKontakt[]
   >([]);
+  // Im Edit-Modus: bereits beigetretene Teilnehmer (Profile-ids) werden aus der
+  // Einladen-Liste herausgefiltert — sie sind ja schon dabei.
+  const [bestehendeTeilnehmerIds, setBestehendeTeilnehmerIds] = useState<
+    string[]
+  >([]);
 
-  // Einladbare Kontakte = Personen-Chats. Bei Lerngruppen ergänzen wir
-  // zusätzlich alle Teilnehmer des ausgewählten Kurses.
+  // Edit-Modus: bestehende Aktivität laden und alle Felder vorbefüllen.
   useEffect(() => {
+    if (!editId) return;
     let abgebrochen = false;
     (async () => {
-      const userChats = await ladeUserChats();
-      const alleChats = [...INITIAL_CHATS, ...userChats];
-      const personenAusChats: EinladbarerKontakt[] = alleChats
-        .filter((c) => c.linkType === "person")
-        .map((c) => ({
-          id: `chat:${c.id}`,
-          name: c.name,
-          bild: c.image,
-          personId: c.linkId,
-        }));
-
-      const kontakteMap = new Map<string, EinladbarerKontakt>();
-      for (const kontakt of personenAusChats) {
-        const key = kontakt.personId
-          ? `person:${kontakt.personId}`
-          : `name:${kontakt.name.toLowerCase()}`;
-        if (!kontakteMap.has(key)) kontakteMap.set(key, kontakt);
-      }
-
-      if (istLerngruppe) {
-        const kursTeilnehmer =
-          DEMO_STUDIENGANG.meineKurse.find((k) => k.id === kursId)?.teilnehmer ??
-          [];
-        for (const teilnehmer of kursTeilnehmer) {
-          const key = teilnehmer.personId
-            ? `person:${teilnehmer.personId}`
-            : `name:${teilnehmer.name.toLowerCase()}`;
-          if (!kontakteMap.has(key)) {
-            kontakteMap.set(key, {
-              id: `kurs:${kursId}:${teilnehmer.id}`,
-              name: teilnehmer.name,
-              bild: teilnehmer.bild,
-              personId: teilnehmer.personId,
-            });
-          }
+      try {
+        const a = await ladeAktivitaet(editId);
+        if (abgebrochen) return;
+        setBilder(a.bilder);
+        setTitel(a.titel);
+        setBeschreibung(a.beschreibung);
+        const sh = parseStrasseHausnummer(a.adresse.strasse);
+        const po = parsePlzOrt(a.adresse.plzOrt);
+        setStrasse(sh.strasse);
+        setHausnummer(sh.hausnummer);
+        setPlz(po.plz);
+        setOrt(po.ort);
+        // Bereits validierte Adresse übernehmen → Karte + "ok"-Block direkt da,
+        // keine erneute Prüfung nötig (solange der User nichts ändert).
+        setAdresseValidiert({
+          strasse: a.adresse.strasse,
+          plzOrt: a.adresse.plzOrt,
+          koordinaten: {
+            latitude: a.koordinaten.latitude,
+            longitude: a.koordinaten.longitude,
+          },
+        });
+        const [tag, monat, jahr] = a.datum.split("/").map(Number);
+        const [std, min] = a.uhrzeit.split(":").map(Number);
+        const d = new Date(
+          jahr ?? new Date().getFullYear(),
+          (monat ?? 1) - 1,
+          tag ?? 1,
+          std ?? 0,
+          min ?? 0,
+          0,
+          0
+        );
+        setDatum(d);
+        setUhrzeit(d);
+        setMaxPlaetze(String(a.maxPlaetze));
+        setSichtbarkeit(a.sichtbarkeit ?? "public");
+        setBestehendeTeilnehmerIds(a.teilnehmer.map((t) => t.id));
+      } catch {
+        if (!abgebrochen) {
+          Alert.alert(
+            "Laden fehlgeschlagen",
+            "Das Treffen konnte nicht geladen werden."
+          );
         }
+      } finally {
+        if (!abgebrochen) setLadeEdit(false);
       }
-
-      const sortiert = [...kontakteMap.values()].sort((a, b) =>
-        a.name.localeCompare(b.name, "de-DE")
-      );
-      if (!abgebrochen) setEinladbareKontakte(sortiert);
     })();
     return () => {
       abgebrochen = true;
     };
-  }, [istLerngruppe, kursId]);
+  }, [editId]);
+
+  // Einladbare Kontakte = die eigenen 1:1-Chats (= Matches). Deren linkId ist
+  // die echte Profile-id der anderen Person → direkt als Einladung verwendbar.
+  // Auch im Edit-Modus, damit man nachträglich einladen kann.
+  useEffect(() => {
+    let abgebrochen = false;
+    (async () => {
+      try {
+        const chats = await ladeChats();
+        const kontakteMap = new Map<string, EinladbarerKontakt>();
+        for (const c of chats) {
+          if (c.linkType !== "person" || !c.linkId) continue;
+          if (!kontakteMap.has(c.linkId)) {
+            kontakteMap.set(c.linkId, {
+              id: c.id,
+              name: c.name,
+              bild: c.image,
+              personId: c.linkId,
+            });
+          }
+        }
+        const sortiert = [...kontakteMap.values()].sort((a, b) =>
+          a.name.localeCompare(b.name, "de-DE")
+        );
+        if (!abgebrochen) setEinladbareKontakte(sortiert);
+      } catch {
+        if (!abgebrochen) setEinladbareKontakte([]);
+      }
+    })();
+    return () => {
+      abgebrochen = true;
+    };
+  }, []);
 
   async function bilderWaehlen() {
     const erlaubnis = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -380,6 +405,15 @@ export default function AktivitaetNeuScreen() {
     return Number.isFinite(z) && z > 0 ? z : 0;
   }, [maxPlaetze]);
 
+  // Liste fürs Einladen: bereits beigetretene Teilnehmer ausblenden.
+  const einladbareSichtbar = useMemo(
+    () =>
+      einladbareKontakte.filter(
+        (k) => !bestehendeTeilnehmerIds.includes(k.personId ?? "")
+      ),
+    [einladbareKontakte, bestehendeTeilnehmerIds]
+  );
+
   const darfErstellen =
     !!titel.trim() &&
     !!beschreibung.trim() &&
@@ -394,87 +428,91 @@ export default function AktivitaetNeuScreen() {
     if (!darfErstellen || !adresseValidiert || !datum || !uhrzeit) return;
     setSendend(true);
     try {
-      const ersteller = await ladeErstellerAlsTeilnehmer();
-      const eingeladeneTeilnehmer: Teilnehmer[] = eingeladen
-        .map((kontaktId) => {
-          const kontakt = einladbareKontakte.find((k) => k.id === kontaktId);
-          if (!kontakt) return null;
-          return {
-            id: `t_${kontakt.id}`,
-            name: kontakt.name,
-            bild: kontakt.bild,
-          };
-        })
-        .filter((x): x is Teilnehmer => x !== null);
+      // Datum + Uhrzeit zu einem Startzeitpunkt kombinieren.
+      const start = new Date(datum);
+      start.setHours(uhrzeit.getHours(), uhrzeit.getMinutes(), 0, 0);
 
-      const id = `u_${Date.now()}`;
-      const basisDaten: Omit<Aktivitaet, "id"> = {
+      const eingabe = {
         titel: titel.trim(),
-        ort: adresseValidiert.plzOrt || adresseValidiert.strasse,
         beschreibung: beschreibung.trim(),
-        hintergrundbild: bilder[0],
-        bilder,
-        adresse: {
-          strasse: adresseValidiert.strasse,
-          plzOrt: adresseValidiert.plzOrt,
-        },
-        koordinaten: adresseValidiert.koordinaten,
-        datum: formatDatum(datum),
-        uhrzeit: formatUhrzeit(uhrzeit),
+        adresseStrasse: adresseValidiert.strasse,
+        adressePlzOrt: adresseValidiert.plzOrt,
+        ortKurz: (adresseValidiert.strasse || ort).slice(0, 80),
+        koordinatenLat: adresseValidiert.koordinaten.latitude,
+        koordinatenLng: adresseValidiert.koordinaten.longitude,
+        startAt: start.toISOString(),
+        dauerMinuten: 120,
         maxPlaetze: maxPlaetzeZahl,
-        teilnehmer: [ersteller, ...eingeladeneTeilnehmer],
         sichtbarkeit,
+        modulId: istLerngruppe ? kursId ?? null : null,
       };
 
-      if (istLerngruppe && kursId) {
-        await erstelleLerngruppe({
-          id,
-          kursId,
-          ...basisDaten,
-        });
-      } else {
-        await erstelleAktivitaet({
-          id,
-          ...basisDaten,
-        });
+      // Anlegen (POST) oder Bearbeiten (PATCH) → liefert die Aktivität-id,
+      // an die anschließend die Einladungen gehen.
+      const aktId =
+        istEdit && editId
+          ? (await aktualisiereAktivitaet(editId, eingabe, bilder)).id
+          : (await erstelleAktivitaet(eingabe, bilder)).id;
 
-        // Eingeladene aus Personen-Chats bekommen einen Treffensvorschlag.
-        const personenChatIds = eingeladen
-          .map((kontaktId) => {
-            const kontakt = einladbareKontakte.find((k) => k.id === kontaktId);
-            if (!kontakt) return null;
-            return kontakt.id.startsWith("chat:")
-              ? kontakt.id.slice("chat:".length)
-              : null;
-          })
-          .filter((x): x is string => x !== null);
+      // Ausgewählte Kontakte → echte Profile-ids. Als Chat-Proposals
+      // verschickt, nachdem das Cover gesetzt ist (echtes Bild auf der Karte).
+      // Einzelne Fehler brechen das Speichern nicht ab.
+      const invites = eingeladen
+        .map((kid) => einladbareKontakte.find((k) => k.id === kid)?.personId)
+        .filter((x): x is string => !!x);
 
-        await Promise.all(
-          personenChatIds.map((chatId) =>
-            sendeAktivitaetsVorschlag(chatId, {
-              coverbild: bilder[0],
-              aktivitaetId: id,
-              aktivitaet: titel.trim(),
-              datum: formatDatum(datum),
-              uhrzeit: formatUhrzeit(uhrzeit),
-              status: "pending",
-            })
-          )
+      let fehlgeschlagen = 0;
+      for (const profileId of invites) {
+        try {
+          await einladeZuAktivitaet(aktId, profileId);
+        } catch {
+          fehlgeschlagen += 1;
+        }
+      }
+      if (fehlgeschlagen > 0) {
+        Alert.alert(
+          istEdit ? "Gespeichert" : "Treffen erstellt",
+          `${fehlgeschlagen} Einladung(en) konnten nicht gesendet werden. Du kannst sie später erneut einladen.`
         );
       }
       router.back();
+    } catch (e) {
+      Alert.alert(
+        istEdit ? "Speichern fehlgeschlagen" : "Erstellen fehlgeschlagen",
+        e instanceof ApiError ? e.message : "Bitte später erneut versuchen."
+      );
     } finally {
       setSendend(false);
     }
   }
 
+  const screenTitel = istEdit
+    ? "Treffen bearbeiten"
+    : istLerngruppe
+    ? "Lerngruppe erstellen"
+    : "Treffen erstellen";
+
+  // Edit-Modus: bis die Daten geladen sind, nur einen Spinner zeigen.
+  if (istEdit && ladeEdit) {
+    return (
+      <>
+        <Stack.Screen options={{ title: screenTitel }} />
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "#fff",
+            justifyContent: "center",
+          }}
+        >
+          <ActivityIndicator color="#007AFF" />
+        </View>
+      </>
+    );
+  }
+
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: istLerngruppe ? "Lerngruppe erstellen" : "Treffen erstellen",
-        }}
-      />
+      <Stack.Screen options={{ title: screenTitel }} />
 
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: "#fff" }}
@@ -561,7 +599,7 @@ export default function AktivitaetNeuScreen() {
           </Text>
         </View>
 
-        {/* Teilnehmer einladen */}
+        {/* Teilnehmer einladen — beim Erstellen und beim Bearbeiten */}
         <TouchableOpacity
           style={styles.sektionKopf}
           onPress={() => setEinladungsOffen((v) => !v)}
@@ -583,12 +621,12 @@ export default function AktivitaetNeuScreen() {
 
         {einladungsOffen && (
           <View style={styles.einladungsListe}>
-            {einladbareKontakte.length === 0 && (
+            {einladbareSichtbar.length === 0 && (
               <Text style={styles.einladungsLeer}>
                 Keine Kontakte vorhanden.
               </Text>
             )}
-            {einladbareKontakte.map((k) => {
+            {einladbareSichtbar.map((k) => {
               const gewaehlt = eingeladen.includes(k.id);
               return (
                 <TouchableOpacity
@@ -856,7 +894,9 @@ export default function AktivitaetNeuScreen() {
             {sendend ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.erstellenText}>Erstellen</Text>
+              <Text style={styles.erstellenText}>
+                {istEdit ? "Speichern" : "Erstellen"}
+              </Text>
             )}
           </TouchableOpacity>
         </View>

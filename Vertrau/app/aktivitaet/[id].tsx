@@ -1,8 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
 import {
+  Stack,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
   Image,
   Linking,
   NativeScrollEvent,
@@ -17,19 +23,18 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { type Aktivitaet, type Teilnehmer } from "../../data/aktivitaeten";
+import { type ProposalStatus } from "../../data/chats";
 import {
-  DEMO_AKTIVITAETEN,
-  type Aktivitaet,
-  type Teilnehmer,
-} from "../../data/aktivitaeten";
-import { type Message, type ProposalStatus } from "../../data/chats";
-import { istBeigetreten, joinAktivitaet } from "../../data/joined";
-import { ladeUserAktivitaeten } from "../../data/userAktivitaeten";
-import { ladeUserLerngruppen } from "../../data/userLerngruppen";
+  beitretenAktivitaet,
+  ladeAktivitaet,
+  verlassenAktivitaet,
+} from "../../api/aktivitaeten";
+import { beantworteProposal } from "../../api/chats";
+import { ApiError } from "../../lib/api";
+import { getCurrentSession } from "../../lib/supabase";
 
-const STORAGE_PREFIX = "messages_v4_";
-
-type Modus = "teilnehmen" | "vorschlagen" | "einladung";
+type Modus = "teilnehmen" | "einladung";
 
 // ─── Bilder-Slideshow ─────────────────────────────────────────────────────────
 
@@ -154,8 +159,7 @@ export default function AktivitaetDetailScreen() {
   const {
     id,
     modus: modusParam,
-    chatId,
-    proposalMessageId,
+    proposalId,
     proposalDatum,
     proposalUhrzeit,
     proposalStatus,
@@ -163,8 +167,7 @@ export default function AktivitaetDetailScreen() {
   } = useLocalSearchParams<{
     id: string;
     modus?: Modus;
-    chatId?: string;
-    proposalMessageId?: string;
+    proposalId?: string;
     proposalDatum?: string;
     proposalUhrzeit?: string;
     proposalStatus?: ProposalStatus;
@@ -176,32 +179,28 @@ export default function AktivitaetDetailScreen() {
 
   const modus: Modus = modusParam ?? "teilnehmen";
 
-  const [aktivitaet, setAktivitaet] = useState<Aktivitaet | undefined>(() =>
-    DEMO_AKTIVITAETEN.find((a) => a.id === id)
-  );
+  const [aktivitaet, setAktivitaet] = useState<Aktivitaet | undefined>(undefined);
+  const [laden, setLaden] = useState(true);
   const [teilnehmerOffen, setTeilnehmerOffen] = useState(false);
-  const [beigetreten, setBeigetreten] = useState(false);
+  const [meineId, setMeineId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getCurrentSession().then((s) => setMeineId(s?.user.id ?? null));
+  }, []);
 
   useEffect(() => {
     if (!id) return;
     let abgebrochen = false;
+    setLaden(true);
     (async () => {
-      const drin = await istBeigetreten(id);
-      if (!abgebrochen) setBeigetreten(drin);
-
-      // User-Aktivitäten nachladen, falls nicht in DEMO
-      if (!DEMO_AKTIVITAETEN.find((a) => a.id === id)) {
-        const user = await ladeUserAktivitaeten();
-        const gefunden = user.find((a) => a.id === id);
-        if (!abgebrochen && gefunden) {
-          setAktivitaet(gefunden);
-        } else {
-          const lerngruppen = await ladeUserLerngruppen();
-          const gefundeneGruppe = lerngruppen.find((g) => g.id === id);
-          if (!abgebrochen && gefundeneGruppe) {
-            setAktivitaet(gefundeneGruppe as unknown as Aktivitaet);
-          }
-        }
+      try {
+        const a = await ladeAktivitaet(id);
+        if (!abgebrochen) setAktivitaet(a);
+      } catch {
+        if (!abgebrochen) setAktivitaet(undefined);
+      } finally {
+        if (!abgebrochen) setLaden(false);
       }
     })();
     return () => {
@@ -209,11 +208,32 @@ export default function AktivitaetDetailScreen() {
     };
   }, [id]);
 
+  // Stilles Neuladen bei jedem Fokus — z. B. nach dem Bearbeiten oder einem
+  // Beitritt erscheinen die Änderungen, ohne Spinner-Flackern.
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      let abgebrochen = false;
+      ladeAktivitaet(id)
+        .then((a) => {
+          if (!abgebrochen) setAktivitaet(a);
+        })
+        .catch(() => {});
+      return () => {
+        abgebrochen = true;
+      };
+    }, [id])
+  );
+
   if (!aktivitaet) {
     return (
       <View style={styles.container}>
         <Stack.Screen options={{ title: "Aktivität" }} />
-        <Text style={styles.leerText}>Aktivität nicht gefunden.</Text>
+        {laden ? (
+          <ActivityIndicator style={{ marginTop: 40 }} color="#007AFF" />
+        ) : (
+          <Text style={styles.leerText}>Aktivität nicht gefunden.</Text>
+        )}
       </View>
     );
   }
@@ -227,81 +247,96 @@ export default function AktivitaetDetailScreen() {
     modus === "einladung" &&
     !vorschlagVonMir &&
     aktuellerProposalStatus === "pending";
-  const darfVorschlagen = modus === "vorschlagen" && !!chatId;
-
   const belegt = aktivitaet.teilnehmer.length;
   const frei = Math.max(0, aktivitaet.maxPlaetze - belegt);
+  const beigetreten =
+    !!meineId && aktivitaet.teilnehmer.some((t) => t.id === meineId);
+  const istAdmin = !!meineId && aktivitaet.adminId === meineId;
 
   async function teilnehmen() {
-    if (!aktivitaet || beigetreten) return;
-    await joinAktivitaet(aktivitaet.id);
-    setBeigetreten(true);
+    if (!aktivitaet || busy) return;
+    setBusy(true);
+    try {
+      const aktualisiert = await beitretenAktivitaet(aktivitaet.id);
+      setAktivitaet(aktualisiert);
+    } catch (e) {
+      Alert.alert(
+        "Beitreten fehlgeschlagen",
+        e instanceof ApiError ? e.message : "Bitte später erneut versuchen."
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function vorschlagen() {
-    if (!darfVorschlagen || !aktivitaet || !chatId) return;
-
-    const jetzt = new Date();
-    const zeit = `${jetzt.getHours().toString().padStart(2, "0")}:${jetzt
-      .getMinutes()
-      .toString()
-      .padStart(2, "0")}`;
-
-    const neu: Message = {
-      id: `msg_${Date.now()}`,
-      fromMe: true,
-      time: zeit,
-      proposal: {
-        coverbild: aktivitaet.hintergrundbild,
-        aktivitaetId: aktivitaet.id,
-        aktivitaet: aktivitaet.titel,
-        datum: aktivitaet.datum,
-        uhrzeit: aktivitaet.uhrzeit,
-        status: "pending",
-      },
-    };
-
-    const key = STORAGE_PREFIX + chatId;
-    const gespeichert = await AsyncStorage.getItem(key);
-    const bestehend: Message[] = gespeichert ? JSON.parse(gespeichert) : [];
-    await AsyncStorage.setItem(key, JSON.stringify([...bestehend, neu]));
-
+  async function verlassen() {
+    if (!aktivitaet || busy) return;
+    setBusy(true);
     try {
-      router.dismiss(2);
-    } catch {
-      router.back();
-      setTimeout(() => router.back(), 0);
+      await verlassenAktivitaet(aktivitaet.id);
+      const aktualisiert = await ladeAktivitaet(aktivitaet.id);
+      setAktivitaet(aktualisiert);
+    } catch (e) {
+      Alert.alert(
+        "Verlassen fehlgeschlagen",
+        e instanceof ApiError ? e.message : "Bitte später erneut versuchen."
+      );
+    } finally {
+      setBusy(false);
     }
   }
 
   async function aufEinladungAntworten(antwort: ProposalStatus) {
-    if (modus !== "einladung" || vorschlagVonMir || !chatId || !proposalMessageId) {
+    if (
+      modus !== "einladung" ||
+      vorschlagVonMir ||
+      !proposalId ||
+      (antwort !== "accepted" && antwort !== "declined") ||
+      busy
+    ) {
       return;
     }
-
-    const key = STORAGE_PREFIX + chatId;
-    const gespeichert = await AsyncStorage.getItem(key);
-    if (!gespeichert) {
+    setBusy(true);
+    try {
+      // Annahme macht backend-seitig zum Teilnehmer + Gruppenchat-Mitglied.
+      await beantworteProposal(proposalId, antwort);
       router.back();
-      return;
+    } catch (e) {
+      Alert.alert(
+        "Aktion fehlgeschlagen",
+        e instanceof ApiError ? e.message : "Bitte später erneut versuchen."
+      );
+    } finally {
+      setBusy(false);
     }
-
-    const bestehend: Message[] = JSON.parse(gespeichert);
-    const aktualisiert = bestehend.map((m) =>
-      m.id === proposalMessageId && m.proposal
-        ? { ...m, proposal: { ...m.proposal, status: antwort } }
-        : m
-    );
-
-    await AsyncStorage.setItem(key, JSON.stringify(aktualisiert));
-    router.back();
   }
 
   const maxVorschau = Math.min(aktivitaet.teilnehmer.length, 5);
 
   return (
     <>
-      <Stack.Screen options={{ title: aktivitaet.titel }} />
+      <Stack.Screen
+        options={{
+          title: aktivitaet.titel,
+          // Bearbeiten nur für den Admin — öffnet das Formular im Edit-Modus.
+          headerRight: istAdmin
+            ? () => (
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: "/aktivitaet/neu",
+                      params: { editId: aktivitaet.id },
+                    })
+                  }
+                  hitSlop={8}
+                  activeOpacity={0.6}
+                >
+                  <Ionicons name="create-outline" size={23} color="#007AFF" />
+                </TouchableOpacity>
+              )
+            : undefined,
+        }}
+      />
 
       <ScrollView
         ref={scrollRef}
@@ -353,10 +388,21 @@ export default function AktivitaetDetailScreen() {
         {teilnehmerOffen && (
           <View style={styles.teilnehmerListe}>
             {aktivitaet.teilnehmer.map((t) => (
-              <View key={t.id} style={styles.teilnehmerZeile}>
+              <TouchableOpacity
+                key={t.id}
+                style={styles.teilnehmerZeile}
+                onPress={() => router.push(`/person/${t.id}`)}
+                activeOpacity={0.7}
+              >
                 <ProfilAvatar teil={t} size={44} />
                 <Text style={styles.teilnehmerName}>{t.name}</Text>
-              </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color="#c7c7cc"
+                  style={{ marginLeft: "auto" }}
+                />
+              </TouchableOpacity>
             ))}
             {aktivitaet.teilnehmer.length === 0 && (
               <Text style={styles.teilnehmerLeer}>Noch keine Teilnehmer.</Text>
@@ -474,49 +520,45 @@ export default function AktivitaetDetailScreen() {
               </Text>
             )}
           </View>
-        ) : modus === "vorschlagen" ? (
-          <View style={styles.aktionWrapper}>
-            <TouchableOpacity
-              style={[
-                styles.vorschlagenButton,
-                !darfVorschlagen && styles.vorschlagenButtonDisabled,
-              ]}
-              onPress={vorschlagen}
-              disabled={!darfVorschlagen}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.vorschlagenText}>Vorschlagen</Text>
-            </TouchableOpacity>
-            {!chatId && (
-              <Text style={styles.hinweisText}>
-                Öffne diesen Screen aus einem Chat, um einen Vorschlag zu senden.
-              </Text>
-            )}
-          </View>
         ) : (
           // modus === "teilnehmen"
           <View style={styles.aktionWrapper}>
-            <TouchableOpacity
-              style={[
-                styles.teilnehmenButton,
-                beigetreten && styles.teilnehmenButtonAktiv,
-              ]}
-              onPress={teilnehmen}
-              disabled={beigetreten}
-              activeOpacity={0.85}
-            >
-              {beigetreten && (
+            {istAdmin ? (
+              <View style={[styles.teilnehmenButton, styles.teilnehmenButtonAktiv]}>
                 <Ionicons
-                  name="checkmark"
-                  size={18}
+                  name="star"
+                  size={16}
                   color="#fff"
                   style={{ marginRight: 6 }}
                 />
-              )}
-              <Text style={styles.teilnehmenText}>
-                {beigetreten ? "Du nimmst teil" : "Teilnehmen"}
-              </Text>
-            </TouchableOpacity>
+                <Text style={styles.teilnehmenText}>Du bist Admin</Text>
+              </View>
+            ) : beigetreten ? (
+              <TouchableOpacity
+                style={[styles.teilnehmenButton, styles.verlassenButton]}
+                onPress={verlassen}
+                disabled={busy}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.teilnehmenText}>
+                  {busy ? "…" : "Treffen verlassen"}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.teilnehmenButton,
+                  frei === 0 && styles.teilnehmenButtonDisabled,
+                ]}
+                onPress={teilnehmen}
+                disabled={busy || frei === 0}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.teilnehmenText}>
+                  {busy ? "…" : frei === 0 ? "Voll" : "Teilnehmen"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </ScrollView>
@@ -753,6 +795,12 @@ const styles = StyleSheet.create({
   },
   teilnehmenButtonAktiv: {
     backgroundColor: "#1f8f4f",
+  },
+  verlassenButton: {
+    backgroundColor: "#e74c3c",
+  },
+  teilnehmenButtonDisabled: {
+    backgroundColor: "#b8b8be",
   },
   teilnehmenText: {
     color: "#fff",

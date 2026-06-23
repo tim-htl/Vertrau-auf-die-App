@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -49,6 +48,10 @@ import {
 } from "../../data/fragen";
 import { HOBBY_KATALOG, hobbyIcon } from "../../data/hobbies";
 import { alleModule, DEMO_STUDIENGANG } from "../../data/kurse";
+import { ladeMeinProfil, speichereMeinProfil } from "../../api/profil";
+import { authSync } from "../../api/me";
+import { getStudiengaenge, getUnis } from "../../api/katalog";
+import { ApiError } from "../../lib/api";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -60,7 +63,6 @@ const TAB_BAR_HOEHE_BASIS = 65;
 const TAB_BAR_ABSTAND_UNTEN_BASIS = 24;
 const TAB_BAR_EXTRA_ABSTAND = 20;
 
-const STORAGE_KEY = "profil_v2";
 
 const STATIC_BACKGROUND = require("../../assets/images/pack8.jpg");
 
@@ -116,7 +118,9 @@ type ProfilData = {
   name: string;
   alter: string;
   studiengang: string;
+  studiengangId: string | null;
   uni: string;
+  uniId: string | null;
   bilder: (string | null)[];
   bio: string;
   hobbies: string[];
@@ -128,7 +132,9 @@ const DEFAULT_PROFIL: ProfilData = {
   name: "Dein Name",
   alter: "22",
   studiengang: "Studiengang",
+  studiengangId: null,
   uni: "Universität",
+  uniId: null,
   bilder: Array(MAX_BILDER).fill(null),
   bio: "",
   hobbies: [],
@@ -233,6 +239,43 @@ function ProfilBearbeiten({
   const [hobbySuche, setHobbySuche] = useState("");
   const [modulAuswahlOffen, setModulAuswahlOffen] = useState(false);
   const [modulSuche, setModulSuche] = useState("");
+
+  // Katalog für die Stammdaten-Picker (Uni/Studiengang).
+  const [unis, setUnis] = useState<{ id: string; name: string; kuerzel: string }[]>(
+    []
+  );
+  const [studiengaenge, setStudiengaenge] = useState<
+    { id: string; name: string; abschluss: string }[]
+  >([]);
+
+  useEffect(() => {
+    let weg = false;
+    getUnis()
+      .then((u) => {
+        if (!weg) setUnis(u);
+      })
+      .catch(() => {});
+    return () => {
+      weg = true;
+    };
+  }, []);
+
+  const aktuelleUniId = profil.uniId;
+  useEffect(() => {
+    let weg = false;
+    if (!aktuelleUniId) {
+      setStudiengaenge([]);
+      return;
+    }
+    getStudiengaenge(aktuelleUniId)
+      .then((s) => {
+        if (!weg) setStudiengaenge(s);
+      })
+      .catch(() => {});
+    return () => {
+      weg = true;
+    };
+  }, [aktuelleUniId]);
 
   const onChange = useCallback(
     (neu: ProfilData) => {
@@ -683,31 +726,99 @@ function ProfilBearbeiten({
           )}
         </View>
 
-        <Text style={stile.editSektionTitel}>Nicht änderbar</Text>
+        <Text style={stile.editSektionTitel}>Stammdaten</Text>
         <View style={stile.editSektion}>
-          {[
-            { label: "Name", wert: profil.name },
-            { label: "Alter", wert: `${profil.alter} Jahre` },
-            { label: "Uni", wert: profil.uni },
-            { label: "Studiengang", wert: profil.studiengang },
-          ].map(({ label, wert }, index, array) => (
-            <View
-              key={label}
-              style={[
-                stile.readonlyZeile,
-                index < array.length - 1 && stile.readonlyTrenner,
-              ]}
-            >
-              <Text style={stile.readonlyLabel}>{label}</Text>
-              <Text style={[
-                stile.readonlyWert, 
-                // Name im Treffen-Stil stärker hervorheben:
-                label === "Name" && { fontWeight: "900", color: TEXT }
-              ]}>
-                {wert}
-              </Text>
-            </View>
-          ))}
+          <Text style={stile.stammLabel}>Name</Text>
+          <TextInput
+            style={stile.stammInput}
+            value={profil.name}
+            onChangeText={(text) => onChange({ ...profil, name: text })}
+            placeholder="Dein Name"
+            placeholderTextColor="#aaa"
+            maxLength={80}
+          />
+
+          <Text style={[stile.stammLabel, stile.stammLabelAbstand]}>Alter</Text>
+          <TextInput
+            style={stile.stammInput}
+            value={profil.alter}
+            onChangeText={(text) =>
+              onChange({ ...profil, alter: text.replace(/[^0-9]/g, "") })
+            }
+            placeholder="z. B. 22"
+            placeholderTextColor="#aaa"
+            keyboardType="number-pad"
+            maxLength={3}
+          />
+
+          <Text style={[stile.stammLabel, stile.stammLabelAbstand]}>Uni</Text>
+          <View style={stile.chipReihe}>
+            {unis.map((u) => {
+              const aktiv = profil.uniId === u.id;
+              return (
+                <TouchableOpacity
+                  key={u.id}
+                  activeOpacity={0.7}
+                  style={[stile.chip, aktiv && stile.chipAktiv]}
+                  onPress={() =>
+                    onChange({
+                      ...profil,
+                      uniId: u.id,
+                      uni: u.name,
+                      studiengangId: null,
+                      studiengang: "",
+                    })
+                  }
+                >
+                  <Text style={[stile.chipText, aktiv && stile.chipTextAktiv]}>
+                    {u.kuerzel || u.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={[stile.stammLabel, stile.stammLabelAbstand]}>
+            Studiengang
+          </Text>
+          {!profil.uniId ? (
+            <Text style={stile.stammHinweis}>Wähle zuerst eine Uni.</Text>
+          ) : studiengaenge.length === 0 ? (
+            <Text style={stile.stammHinweis}>
+              Keine Studiengänge für diese Uni hinterlegt.
+            </Text>
+          ) : (
+            studiengaenge.map((s) => {
+              const aktiv = profil.studiengangId === s.id;
+              const kuerzel =
+                s.abschluss === "BACHELOR"
+                  ? "B.Sc."
+                  : s.abschluss === "MASTER"
+                    ? "M.Sc."
+                    : s.abschluss;
+              return (
+                <TouchableOpacity
+                  key={s.id}
+                  activeOpacity={0.7}
+                  style={stile.sgZeile}
+                  onPress={() =>
+                    onChange({
+                      ...profil,
+                      studiengangId: s.id,
+                      studiengang: s.name,
+                    })
+                  }
+                >
+                  <Text style={stile.sgText} numberOfLines={1}>
+                    {s.name} · {kuerzel}
+                  </Text>
+                  {aktiv && (
+                    <Ionicons name="checkmark" size={18} color="#ff6b5f" />
+                  )}
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -747,19 +858,29 @@ export default function ProfilScreen() {
 
     async function profilLaden() {
       try {
-        const gespeichert = await AsyncStorage.getItem(STORAGE_KEY);
-        if (!istAktiv || !gespeichert) return;
+        // Profil aus dem Backend (GET /me). Bei 404 (eingeloggt, aber noch
+        // kein Profil-Record) wird es per authSync idempotent angelegt.
+        let roh: ProfilData;
+        try {
+          roh = await ladeMeinProfil();
+        } catch (e) {
+          if (e instanceof ApiError && e.statusCode === 404) {
+            await authSync();
+            roh = await ladeMeinProfil();
+          } else {
+            throw e;
+          }
+        }
+        if (!istAktiv) return;
 
-        const parsed = JSON.parse(gespeichert) as Partial<ProfilData>;
-        const geladen = normalisiereProfil(parsed);
-
+        const geladen = normalisiereProfil(roh);
         setProfil(geladen);
         setSheetProfil(geladen);
         editProfilRef.current = geladen;
       } catch {
         Alert.alert(
           "Profil konnte nicht geladen werden",
-          "Deine gespeicherten Profildaten konnten nicht gelesen werden."
+          "Der Server ist gerade nicht erreichbar. Bitte versuche es später erneut."
         );
       }
     }
@@ -780,10 +901,13 @@ export default function ProfilScreen() {
       const bereinigt = bereinigeProfil(editProfilRef.current);
 
       try {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(bereinigt));
-        editProfilRef.current = bereinigt;
-        setProfil(bereinigt);
-        setSheetProfil(bereinigt);
+        // Speichert Bio/Bilder/Hobbies/Fragen ins Backend (inkl. Foto-Upload);
+        // danach frisch laden → kanonischer Stand mit hochgeladenen Bild-URLs.
+        await speichereMeinProfil(bereinigt);
+        const aktuell = normalisiereProfil(await ladeMeinProfil());
+        editProfilRef.current = aktuell;
+        setProfil(aktuell);
+        setSheetProfil(aktuell);
       } catch {
         Alert.alert(
           "Speichern fehlgeschlagen",
@@ -815,10 +939,11 @@ export default function ProfilScreen() {
     const bereinigt = bereinigeProfil(sheetProfil);
 
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(bereinigt));
-      editProfilRef.current = bereinigt;
-      setProfil(bereinigt);
-      setSheetProfil(bereinigt);
+      await speichereMeinProfil(bereinigt);
+      const aktuell = normalisiereProfil(await ladeMeinProfil());
+      editProfilRef.current = aktuell;
+      setProfil(aktuell);
+      setSheetProfil(aktuell);
       sheetRef.current?.dismiss();
     } catch {
       Alert.alert(
@@ -1184,6 +1309,71 @@ const stile = StyleSheet.create({
     borderColor: "#d1d1d6",
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+
+  stammLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: MUTED,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  stammLabelAbstand: {
+    marginTop: 16,
+  },
+  stammInput: {
+    ...TREFFEN_TYPO.body,
+    color: TEXT,
+    backgroundColor: "#F2F2F7",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  stammHinweis: {
+    fontSize: 13,
+    color: MUTED,
+    paddingVertical: 6,
+  },
+  chipReihe: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: "#F2F2F7",
+    borderWidth: 1,
+    borderColor: "#E5E5EA",
+  },
+  chipAktiv: {
+    backgroundColor: "#ff6b5f",
+    borderColor: "#ff6b5f",
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: TEXT,
+  },
+  chipTextAktiv: {
+    color: "#fff",
+  },
+  sgZeile: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 11,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E5E5EA",
+    gap: 10,
+  },
+  sgText: {
+    flex: 1,
+    fontSize: 15,
+    color: TEXT,
+    fontWeight: "500",
   },
 
   bildReihe: {
