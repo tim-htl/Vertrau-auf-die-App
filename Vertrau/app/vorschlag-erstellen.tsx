@@ -24,7 +24,9 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { sendeAktivitaetsVorschlag } from "../data/userAktivitaeten";
+import { sendeVorschlag } from "../api/chats";
+import { uploadBild } from "../api/storage";
+import { ApiError } from "../lib/api";
 
 // Maske für "Eigenes Treffen vorschlagen" in einem 1:1-Chat.
 // Layout angelehnt an aktivitaet/neu, aber OHNE Beschreibung, Dauer,
@@ -239,22 +241,41 @@ export default function VorschlagErstellenScreen() {
     if (!darfSenden || !chatId || !adresseValidiert || !datum || !uhrzeit) return;
     setSendend(true);
     try {
-      await sendeAktivitaetsVorschlag(chatId, {
-        coverbild: bilder[0],
-        customBilder: bilder,
-        customAdresse: {
-          strasse: adresseValidiert.strasse,
-          plzOrt: adresseValidiert.plzOrt,
-        },
-        customKoordinaten: adresseValidiert.koordinaten,
-        aktivitaet: titel.trim(),
-        datum: formatDatum(datum),
-        uhrzeit: formatUhrzeit(uhrzeit),
-        status: "pending",
+      // Datum + Uhrzeit zu einem Startzeitpunkt kombinieren.
+      const start = new Date(datum);
+      start.setHours(uhrzeit.getHours(), uhrzeit.getMinutes(), 0, 0);
+
+      // Eigene Fotos in den privaten chat-media-Bucket hochladen → Pfade.
+      // Das Backend signiert sie beim Lesen (GET /chats/:id/messages).
+      const pfade = await Promise.all(
+        bilder.map((b) =>
+          b.startsWith("http")
+            ? Promise.resolve(b)
+            : uploadBild(b, "chat-media", { chatId })
+        )
+      );
+
+      await sendeVorschlag(chatId, {
+        titel: titel.trim(),
+        startAt: start.toISOString(),
+        customAdresseStrasse: adresseValidiert.strasse,
+        customAdressePlzOrt: adresseValidiert.plzOrt,
+        customKoordinatenLat: adresseValidiert.koordinaten.latitude,
+        customKoordinatenLng: adresseValidiert.koordinaten.longitude,
+        bilder: pfade,
       });
-      // Zurück zum Chat (zwei Ebenen: Vorschlag-Erstellen → Treffen-Vorschlagen → Chat).
-      router.dismissAll?.();
-      router.back();
+      // Gezielt zurück zum konkreten Chat — egal über wie viele Zwischenscreens
+      // und egal, woher der Chat geöffnet wurde (Chat-Tab oder Personen-Profil).
+      router.dismissTo({ pathname: "/chat/[id]", params: { id: chatId } });
+    } catch (e) {
+      const detail =
+        e instanceof ApiError
+          ? `${e.statusCode}: ${e.message}`
+          : e instanceof Error
+          ? e.message
+          : String(e);
+      console.warn("[vorschlag-erstellen] fehlgeschlagen:", detail, e);
+      Alert.alert("Vorschlagen fehlgeschlagen", detail);
     } finally {
       setSendend(false);
     }

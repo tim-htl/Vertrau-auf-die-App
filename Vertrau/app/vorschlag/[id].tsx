@@ -1,9 +1,9 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -14,12 +14,9 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  type Message,
-  type MessageProposal,
-  type ProposalStatus,
-} from "../../data/chats";
-import { MESSAGES_PREFIX } from "../../data/userAktivitaeten";
+import { type MessageProposal, type ProposalStatus } from "../../data/chats";
+import { beantworteProposal, ladeNachrichten } from "../../api/chats";
+import { ApiError } from "../../lib/api";
 
 // Info-/Antwort-Screen für Zu-zweit-Vorschläge, die KEINE locationId und
 // KEINE aktivitaetId haben — also vom User selbst zusammengestellte Treffen.
@@ -38,7 +35,11 @@ export default function VorschlagInfoScreen() {
 
   const [proposal, setProposal] = useState<MessageProposal | null>(null);
   const [laden, setLaden] = useState(true);
+  const [busy, setBusy] = useState(false);
 
+  // Den Vorschlag aus dem Backend holen: Chat-Nachrichten laden und die
+  // passende Nachricht (= proposalMessageId) finden. Liefert auch signierte
+  // Bild-URLs (chat-media) und die proposalId fürs Annehmen/Ablehnen.
   useEffect(() => {
     let abgebrochen = false;
     (async () => {
@@ -46,16 +47,14 @@ export default function VorschlagInfoScreen() {
         setLaden(false);
         return;
       }
-      const roh = await AsyncStorage.getItem(MESSAGES_PREFIX + chatId);
-      if (!roh) {
+      try {
+        const nachrichten = await ladeNachrichten(chatId);
+        const treffer = nachrichten.find((m) => m.id === id);
+        if (!abgebrochen) setProposal(treffer?.proposal ?? null);
+      } catch {
+        if (!abgebrochen) setProposal(null);
+      } finally {
         if (!abgebrochen) setLaden(false);
-        return;
-      }
-      const nachrichten: Message[] = JSON.parse(roh);
-      const treffer = nachrichten.find((m) => m.id === id);
-      if (!abgebrochen) {
-        setProposal(treffer?.proposal ?? null);
-        setLaden(false);
       }
     })();
     return () => {
@@ -69,18 +68,25 @@ export default function VorschlagInfoScreen() {
     !!proposal && !vorschlagVonMir && aktuellerStatus === "pending";
 
   async function antworten(antwort: ProposalStatus) {
-    if (!chatId || !id) return;
-    const key = MESSAGES_PREFIX + chatId;
-    const roh = await AsyncStorage.getItem(key);
-    if (!roh) return;
-    const nachrichten: Message[] = JSON.parse(roh);
-    const aktualisiert = nachrichten.map((m) =>
-      m.id === id && m.proposal
-        ? { ...m, proposal: { ...m.proposal, status: antwort } }
-        : m
-    );
-    await AsyncStorage.setItem(key, JSON.stringify(aktualisiert));
-    router.back();
+    if (
+      !proposal?.proposalId ||
+      (antwort !== "accepted" && antwort !== "declined") ||
+      busy
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await beantworteProposal(proposal.proposalId, antwort);
+      router.back();
+    } catch (e) {
+      Alert.alert(
+        "Aktion fehlgeschlagen",
+        e instanceof ApiError ? e.message : "Bitte später erneut versuchen."
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (laden) {

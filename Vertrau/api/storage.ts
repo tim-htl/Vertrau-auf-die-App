@@ -5,7 +5,8 @@ import type { GetUploadUrlResponse, StorageBucket } from "../types/api";
 // Bild-Upload. Flow (siehe backend/src/routes/storage.ts):
 //   1. Backend stellt eine presigned Upload-URL aus (POST /storage/upload-url)
 //   2. Client lädt die Datei DIREKT zu Supabase Storage hoch
-//   3. öffentliche URL zurückgeben (für avatars/aktivitaet-cover)
+//   3. Rückgabe: öffentliche URL (avatars/aktivitaet-cover) ODER der Storage-
+//      Pfad (chat-media — privat, das Backend signiert ihn beim Lesen).
 //
 // Für React Native: das lokale Bild (file://-URI) wird als ArrayBuffer
 // gelesen und über uploadToSignedUrl hochgeladen.
@@ -26,11 +27,12 @@ function extensionFromUri(uri: string): string {
   return ext && /^(jpg|jpeg|png|webp|heic)$/.test(ext) ? ext : "jpg";
 }
 
-// Lädt ein lokales Bild hoch und gibt die öffentliche URL zurück.
+// Lädt ein lokales Bild hoch. Rückgabe: öffentliche URL (avatars/
+// aktivitaet-cover) bzw. der Storage-Pfad (chat-media).
 export async function uploadBild(
   localUri: string,
-  bucket: Extract<StorageBucket, "avatars" | "aktivitaet-cover"> = "avatars",
-  extras: { aktivitaetId?: string } = {}
+  bucket: StorageBucket = "avatars",
+  extras: { aktivitaetId?: string; chatId?: string } = {}
 ): Promise<string> {
   const extension = extensionFromUri(localUri);
 
@@ -50,6 +52,10 @@ export async function uploadBild(
       contentType: contentType(extension),
     });
   if (error) throw new Error(`Upload fehlgeschlagen: ${error.message}`);
+
+  // chat-media ist privat → keine öffentliche URL. Der Pfad wird gespeichert,
+  // das Backend signiert ihn beim Lesen (GET /chats/:id/messages).
+  if (bucket === "chat-media") return path;
 
   if (!publicUrl) throw new Error("Keine öffentliche URL erhalten.");
   return publicUrl;

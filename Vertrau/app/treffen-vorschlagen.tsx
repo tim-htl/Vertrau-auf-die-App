@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   StyleSheet,
@@ -9,11 +10,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { DEMO_AKTIVITAETEN, type Aktivitaet } from "../data/aktivitaeten";
-import { DEMO_LOCATIONS } from "../data/locations";
-import { ladeUserAktivitaeten } from "../data/userAktivitaeten";
-
-type Modus = "zuZweit" | "gruppe";
+import { ladeLocations } from "../api/locations";
+import { type Location } from "../data/locations";
 
 // ─── Eine Listenzeile (komplett tapbar) ───────────────────────────────────────
 
@@ -46,15 +44,24 @@ function ListenZeile({
 export default function TreffenVorschlagenScreen() {
   const router = useRouter();
   const { chatId } = useLocalSearchParams<{ chatId?: string }>();
-  const [modus, setModus] = useState<Modus>("zuZweit");
-  const [userAktivitaeten, setUserAktivitaeten] = useState<Aktivitaet[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [laden, setLaden] = useState(true);
 
+  // Kuratierte Orte aus dem Backend (GET /locations). Gruppentreffen-Vorschläge
+  // laufen über das Einladen (siehe Treffen erstellen/bearbeiten) und sind hier
+  // bewusst nicht enthalten.
   useFocusEffect(
     useCallback(() => {
       let abgebrochen = false;
       (async () => {
-        const liste = await ladeUserAktivitaeten();
-        if (!abgebrochen) setUserAktivitaeten(liste);
+        try {
+          const liste = await ladeLocations();
+          if (!abgebrochen) setLocations(liste);
+        } catch {
+          if (!abgebrochen) setLocations([]);
+        } finally {
+          if (!abgebrochen) setLaden(false);
+        }
       })();
       return () => {
         abgebrochen = true;
@@ -69,21 +76,6 @@ export default function TreffenVorschlagenScreen() {
     });
   }
 
-  function oeffneAktivitaet(aktivitaetId: string) {
-    router.push({
-      pathname: "/aktivitaet/[id]",
-      params: {
-        id: aktivitaetId,
-        modus: "vorschlagen",
-        ...(chatId ? { chatId } : {}),
-      },
-    });
-  }
-
-  function oeffneErstellen() {
-    router.push("/aktivitaet/standort-waehlen");
-  }
-
   function oeffneEigenenVorschlag() {
     router.push({
       pathname: "/vorschlag-erstellen",
@@ -96,42 +88,11 @@ export default function TreffenVorschlagenScreen() {
       <Stack.Screen options={{ title: "Treffen vorschlagen" }} />
 
       <View style={styles.container}>
-        {/* Umschalter: Zu zweit / Gruppentreffen */}
-        <View style={styles.umschalter}>
-          <TouchableOpacity
-            style={[styles.tab, modus === "zuZweit" && styles.tabAktiv]}
-            onPress={() => setModus("zuZweit")}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                modus === "zuZweit" && styles.tabTextAktiv,
-              ]}
-            >
-              Zu zweit
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, modus === "gruppe" && styles.tabAktiv]}
-            onPress={() => setModus("gruppe")}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                modus === "gruppe" && styles.tabTextAktiv,
-              ]}
-            >
-              Gruppentreffen
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Liste je nach Modus */}
-        {modus === "zuZweit" ? (
+        {laden ? (
+          <ActivityIndicator style={{ marginTop: 40 }} color="#007AFF" />
+        ) : (
           <FlatList
-            data={DEMO_LOCATIONS}
+            data={locations}
             keyExtractor={(item) => item.id}
             ListHeaderComponent={
               <TouchableOpacity
@@ -143,7 +104,7 @@ export default function TreffenVorschlagenScreen() {
                   <Ionicons name="add" size={28} color="#007AFF" />
                 </View>
                 <Text style={[styles.name, styles.nameErstellen]} numberOfLines={1}>
-                  Eigenes Treffen erstellen
+                  Eigenes Treffen vorschlagen
                 </Text>
                 <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />
               </TouchableOpacity>
@@ -153,34 +114,6 @@ export default function TreffenVorschlagenScreen() {
                 name={item.name}
                 coverbild={item.coverbild}
                 onPress={() => oeffneLocation(item.id)}
-              />
-            )}
-            contentContainerStyle={styles.liste}
-          />
-        ) : (
-          <FlatList
-            data={[...userAktivitaeten, ...DEMO_AKTIVITAETEN]}
-            keyExtractor={(item) => item.id}
-            ListHeaderComponent={
-              <TouchableOpacity
-                style={styles.zeile}
-                onPress={oeffneErstellen}
-                activeOpacity={0.7}
-              >
-                <View style={styles.coverErstellen}>
-                  <Ionicons name="add" size={28} color="#007AFF" />
-                </View>
-                <Text style={[styles.name, styles.nameErstellen]} numberOfLines={1}>
-                  Gruppentreffen erstellen
-                </Text>
-                <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />
-              </TouchableOpacity>
-            }
-            renderItem={({ item }) => (
-              <ListenZeile
-                name={item.titel}
-                coverbild={item.hintergrundbild}
-                onPress={() => oeffneAktivitaet(item.id)}
               />
             )}
             contentContainerStyle={styles.liste}

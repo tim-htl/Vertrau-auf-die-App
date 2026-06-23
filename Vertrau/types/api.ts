@@ -342,6 +342,23 @@ export type MatchListItem = {
 export type GetMatchesResponse = { matches: MatchListItem[] };
 export type GetSwipeQueueResponse = { personen: Person[] };
 
+// ── Locations (Katalog für 1:1-Vorschläge) ───────────────────────────────────
+
+export type LocationKatalog = {
+  id: UUID;
+  name: string;
+  beschreibung: string;
+  kategorie: LocationKategorie;
+  bilder: string[];
+  adresseStrasse: string;
+  adressePlzOrt: string;
+  koordinaten: Coordinates;
+  isPartner: boolean;
+};
+
+export type GetLocationsResponse = { locations: LocationKatalog[] };
+export type GetLocationResponse = { location: LocationKatalog };
+
 // ── Storage ─────────────────────────────────────────────────────────────────
 
 export type StorageBucket = "avatars" | "aktivitaet-cover" | "chat-media";

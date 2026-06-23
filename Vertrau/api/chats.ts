@@ -16,6 +16,7 @@ import type {
   Message as ApiMessage,
   PatchProposalResponse,
   PostMessageResponse,
+  PostProposalResponse,
 } from "../types/api";
 
 // Cover-Fallback, falls ein Proposal (noch) kein Bild trägt.
@@ -164,5 +165,30 @@ export async function beantworteProposal(
   await apiFetch<PatchProposalResponse>(`/meeting-proposals/${proposalId}`, {
     method: "PATCH",
     body: { status: antwort === "accepted" ? "ACCEPTED" : "DECLINED" },
+  });
+}
+
+export type VorschlagInput = {
+  titel: string;
+  startAt: string; // ISO
+  bilder?: string[];
+  locationId?: string;
+  aktivitaetId?: string;
+  customAdresseStrasse?: string;
+  customAdressePlzOrt?: string;
+  customKoordinatenLat?: number;
+  customKoordinatenLng?: number;
+};
+
+// POST /chats/:chatId/proposals — Treffens-Vorschlag (zu zweit) senden.
+// Genau eine Quelle: locationId | aktivitaetId | custom (Adresse + Koordinaten).
+// bilder = Cover-Snapshot für die Chat-Karte.
+export async function sendeVorschlag(
+  chatId: string,
+  input: VorschlagInput
+): Promise<void> {
+  await apiFetch<PostProposalResponse>(`/chats/${chatId}/proposals`, {
+    method: "POST",
+    body: input,
   });
 }
